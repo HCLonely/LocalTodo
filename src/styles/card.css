@@ -9,3 +9,8 @@ body:has(.desktop-card){margin:0;min-width:0;overflow:hidden;background:var(--su
 .card-filter select{min-height:24px}.card-quick-add button{background:var(--accent);color:var(--on-accent)}
 .card-task{border-radius:6px;transition:background-color .15s ease}
 .card-task:hover,.card-task:focus-within{background:var(--accent-soft)}
+.card-context-menu{position:fixed;z-index:1000;width:200px;max-width:calc(100vw - 12px);max-height:calc(100vh - 12px);overflow-y:auto;padding:5px;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:0 8px 28px #0003}
+.card-context-menu button{display:block;width:100%;border:0;border-radius:6px;padding:9px 12px;text-align:left;background:transparent;color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.card-context-menu button:hover,.card-context-menu button:focus-visible{background:var(--accent-soft);outline:none}
+.card-context-menu button.danger{color:var(--danger)}
+.card-context-menu button:disabled{opacity:.45;cursor:default;background:transparent}

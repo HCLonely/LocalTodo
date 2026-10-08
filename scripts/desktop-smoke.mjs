@@ -70,5 +70,32 @@ await card.screenshot({path:'docs/screenshots/desktop-card.png'});
 await card.getByRole('button',{name:'卡片验收 · 快速添加',exact:true}).click();await expect(page.getByLabel('任务标题',{exact:true})).toHaveValue('卡片验收 · 快速添加');await page.getByRole('button',{name:'关闭编辑',exact:true}).click();record('card task title opens the same task editor in main window');
 await card.getByRole('checkbox',{name:'完成 卡片验收 · 快速添加',exact:true}).click();await expect(card.getByRole('button',{name:'卡片验收 · 快速添加',exact:true})).toBeHidden();await expect(page.getByRole('button',{name:'卡片验收 · 快速添加',exact:true})).toBeHidden();record('card completion synchronizes both views');
 await card.getByRole('button',{name:'隐藏小卡片',exact:true}).click();await page.getByRole('button',{name:'桌面小卡片',exact:true}).click();await expect(card.getByLabel('快速添加任务')).toBeVisible();record('hidden card reopens from main entry');
+// Both windows cancel native browser menus, while the card owns a task menu.
+for(const target of [page,card]){
+ const cancelled=await target.evaluate(()=>{const event=new MouseEvent('contextmenu',{bubbles:true,cancelable:true});return !document.body.dispatchEvent(event);});
+ if(!cancelled)throw new Error('Native context menu was not suppressed');
+ const blocked=await target.evaluate(()=>!window.dispatchEvent(new KeyboardEvent('keydown',{key:'F12',bubbles:true,cancelable:true})));
+ if(!blocked)throw new Error('Debug shortcut was not suppressed');
+}
+await expect(page.getByRole('menu')).toHaveCount(0);record('main right-click and debug shortcuts are disabled');
+await card.getByRole('heading').click({button:'right'});
+await card.getByRole('menuitem',{name:'添加今日任务',exact:true}).click();
+await expect(card.getByLabel('快速添加任务')).toBeFocused();
+await card.getByLabel('快速添加任务').fill('右键验收任务');await card.getByRole('button',{name:'添加任务',exact:true}).click();
+const contextTask=card.getByRole('button',{name:'右键验收任务',exact:true});
+await expect(contextTask).toBeVisible();await contextTask.click({button:'right'});
+await expect(card.getByRole('menu')).toBeVisible();await expect(card.getByRole('menu')).not.toContainText(/Inspect|DevTools|检查|调试/);
+await card.screenshot({path:'docs/screenshots/desktop-card-context-menu.png'});
+const bounds=await card.getByRole('menu').boundingBox();const viewport=await card.evaluate(()=>({width:innerWidth,height:innerHeight}));
+if(!bounds||bounds.x<0||bounds.y<0||bounds.x+bounds.width>viewport.width||bounds.y+bounds.height>viewport.height)throw new Error('Context menu clips outside card');
+await card.keyboard.press('Escape');await expect(card.getByRole('menu')).toHaveCount(0);
+await contextTask.click({button:'right'});await card.getByRole('menuitem',{name:'编辑任务',exact:true}).click();
+await expect(page.getByLabel('任务标题',{exact:true})).toHaveValue('右键验收任务');await page.getByRole('button',{name:'关闭编辑',exact:true}).click();record('card context menu opens task editor and stays within window');
+await contextTask.click({button:'right'});await card.getByRole('menuitem',{name:'移入回收站',exact:true}).click();
+await expect(contextTask).toBeHidden();await expect(page.getByRole('button',{name:'右键验收任务',exact:true})).toBeHidden();
+await page.getByRole('button',{name:/回收站/}).click();await expect(page.getByRole('button',{name:'恢复任务 右键验收任务',exact:true})).toBeVisible();record('card context delete synchronizes both windows and remains recoverable');
+await card.getByRole('heading').click({button:'right'});await card.getByRole('menuitem',{name:'取消置顶',exact:true}).click();
+if(await card.evaluate(()=>window.__TAURI_INTERNALS__.invoke('card_pin'))!==false)throw new Error('Context menu pin not persisted');
+await card.getByRole('heading').click({button:'right'});await card.getByRole('menuitem',{name:'置顶卡片',exact:true}).click();record('blank card context menu focuses add input and updates native pin');
 writeFileSync('docs/desktop-smoke-results.json',JSON.stringify({at:new Date().toISOString(),results,notification},null,2));
 await browser.close();

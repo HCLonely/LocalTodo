@@ -1,10 +1,10 @@
 {
-  "at": "2026-10-08T06:28:49.759663+00:00",
+  "at": "2026-10-08T06:40:52.012446+00:00",
   "version": "0.2.0",
-  "exe_bytes": 14438912,
-  "exe_sha256": "f2858e33be55d4748bcbb999778d608330a62c94931e33be16df72c8be3addf4",
-  "zip_bytes": 4682367,
-  "zip_sha256": "87fd785bd67a99d2e78a083dc6244934a00cea949742beb1358158ecabce2782",
+  "exe_bytes": 14439424,
+  "exe_sha256": "66cc3d8acfbfaffbeb9d2093ad87cc464e3baf23943c10f3c3e5edc574870ed9",
+  "zip_bytes": 4482645,
+  "zip_sha256": "00aef674dfd6586d59916ccbbe75db040843a304e9568677fda4ed39a216b142",
   "zip_contains_no_user_data": true,
   "portable_exe_matches_release": true
 }

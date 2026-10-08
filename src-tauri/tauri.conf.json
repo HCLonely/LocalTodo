@@ -17,7 +17,8 @@
         "height": 840,
         "minWidth": 900,
         "minHeight": 640,
-        "center": true
+        "center": true,
+        "devtools": false
       },
       {
         "label": "card",
@@ -31,7 +32,8 @@
         "decorations": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "resizable": true
+        "resizable": true,
+        "devtools": false
       }
     ],
     "security": {

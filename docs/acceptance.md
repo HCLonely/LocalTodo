@@ -45,3 +45,5 @@
 - JSON恢复替换现有数据，提前创建SQLite恢复快照；应用内不导入SQLite快照。
 
 自动化：Rust20项、前端11项全部通过；真实桌面9项通过。安装验证详见installed-smoke-results.json，安装包和升级核对详见release-verification.json。CI已配置，尚未向远程推送或运行。
+
+便携版最新增量验收：21项Rust、17项前端、18项真实双窗口检查通过；主界面默认右键与调试快捷键禁用，小卡片右键编辑、删除至回收站、快速添加入口及原生置顶保存通过，菜单无调试条目且不超出卡片边缘。详见desktop-smoke-results.json和portable-release-verification.json。

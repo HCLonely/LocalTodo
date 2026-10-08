@@ -7,9 +7,11 @@ import TaskEditor from './TaskEditor';
 import TaskList from './TaskList';
 import Settings from './Settings';
 import ReminderInbox from '../features/reminders/ReminderInbox';
+import {useContextMenuPolicy} from './useContextMenuPolicy';
 
 function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 export default function App(){
+ useContextMenuPolicy();
  const [view,setView]=useState<View>('today');const [date,setDate]=useState(localDate());const [search,setSearch]=useState('');const [searchQuery,setSearchQuery]=useState('');const [priority,setPriority]=useState<number|null>(null);const [page,setPage]=useState(0);
  const [data,setData]=useState<Snapshot|null>(null);const [error,setError]=useState('');const [loading,setLoading]=useState(true);const [editor,setEditor]=useState<{task:Task|null;token:number}|null>(null);const [showSettings,setShowSettings]=useState(false);const [showInbox,setShowInbox]=useState(false);const [notice,setNotice]=useState('');const sequence=useRef(0);const searchRef=useRef<HTMLInputElement>(null);
  const [schedulerError,setSchedulerError]=useState('');const editorGuard=useRef<()=>Promise<boolean>>(async()=>true);const editorToken=useRef(0);

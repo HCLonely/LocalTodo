@@ -62,7 +62,7 @@ npm run tauri build -- --debug --no-bundle
 - `src`：中文界面、任务详情、设置、提醒中心与交互测试。
 - `docs`：已确认方案、开发记录、验收结果与界面截图。
 
-首版不包含云同步、独立Windows服务或通知点击跳转；关机/主动退出时不发送提醒。已通过21项Rust测试、14项前端测试和14项真实桌面检查；本机安装、关闭驻留、单实例及通知提交通过。公开分发前仍需完成干净Windows 10/11机器、真实睡眠恢复、通知关闭/勿扰、登录启动及含大量数据的跨版本升级验收，详见[acceptance.md](docs/acceptance.md)。
+首版不包含云同步、独立Windows服务或通知点击跳转；关机/主动退出时不发送提醒。已通过21项Rust测试、17项前端测试和18项真实桌面检查；本机安装、关闭驻留、单实例及通知提交通过。公开分发前仍需完成干净Windows 10/11机器、真实睡眠恢复、通知关闭/勿扰、登录启动及含大量数据的跨版本升级验收，详见[acceptance.md](docs/acceptance.md)。
 
 界面截图：
 
@@ -71,3 +71,5 @@ npm run tauri build -- --debug --no-bundle
 便携发布版检查（先从托盘退出当前实例再执行）：`./scripts/portable-smoke.ps1`。该脚本在检查完成后保留程序运行；原生确认测试通过Windows UI Automation按按钮。数据库指纹辅助脚本需要可用的Python3与sqlite3，日常开发和构建无需Python。
 
 ![桌面小卡片](docs/screenshots/desktop-card.png)
+
+主界面不显示右键菜单；小卡片右键可完成/编辑/移入回收站，也可快速添加、切换置顶、刷新、打开主界面或隐藏卡片，不包含调试菜单。

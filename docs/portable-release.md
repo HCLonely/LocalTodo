@@ -21,26 +21,28 @@ exe旁的`data/todo.db`保存任务与设置，`data/card.json`保存置顶偏�
 
 ## 验证
 
-- Rust21项、前端14项通过；fmt、workspace全目标Clippy、TypeScript与Vite生产构建通过。
-- 真实WebView2/Rust/SQLite双窗口操作14项通过，包含任务同步、卡片编辑入口、置顶偏好与隐藏重开。
+- Rust21项、前端17项通过；fmt、workspace全目标Clippy、TypeScript与Vite生产构建通过。
+- 真实WebView2/Rust/SQLite双窗口操作18项通过，包含任务同步、卡片编辑入口、置顶偏好与隐藏重开。
 - 便携发布版Windows UI Automation检查通过：原生WS_EX_TOPMOST标志置顶/取消、置顶保存至data、隐藏重开、第二进程退出。
 - 从系统临时目录启动仍把数据库和缓存写到exe/data；实际WebView2进程user-data-dir核对通过。
 - EXE与release完全一致；ZIP内exe也完全一致，且无任何数据库、测试任务或缓存。
 
 证据：desktop-smoke-results.json、portable-smoke-results.json、portable-release-verification.json。干净Windows10/11、真实睡眠恢复/勿扰与注销后登录启动仍待独立系统验收。
 
-ZIP大小：4,682,367字节；SHA-256：
+ZIP大小：4,482,645字节；SHA-256：
 
 ```
-87fd785bd67a99d2e78a083dc6244934a00cea949742beb1358158ecabce2782
+00aef674dfd6586d59916ccbbe75db040843a304e9568677fda4ed39a216b142
 ```
 
-EXE大小：14,438,912字节；SHA-256：
+EXE大小：14,439,424字节；SHA-256：
 
 ```
-f2858e33be55d4748bcbb999778d608330a62c94931e33be16df72c8be3addf4
+66cc3d8acfbfaffbeb9d2093ad87cc464e3baf23943c10f3c3e5edc574870ed9
 ```
 
 ![卡片界面](screenshots/desktop-card.png)
 
 小卡片任务整行悬浮高亮已加入；浅色与深色主题均验证，包含复选框、标题、信息及行尾空白区域。便携EXE和ZIP同步更新。
+
+主界面禁用默认右键菜单；小卡片提供任务完成、编辑、移入回收站及通用管理菜单。两窗口禁用开发者工具与调试快捷键；菜单支持键盘操作、Esc/外部点击关闭及窗口边缘避让。

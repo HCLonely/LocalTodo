@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-08T06:15:51.985Z",
+  "at": "2026-10-08T06:39:32.953Z",
   "results": [
     {
       "name": "native window loads SQLite-backed empty state",
@@ -55,6 +55,22 @@
     },
     {
       "name": "hidden card reopens from main entry",
+      "passed": true
+    },
+    {
+      "name": "main right-click and debug shortcuts are disabled",
+      "passed": true
+    },
+    {
+      "name": "card context menu opens task editor and stays within window",
+      "passed": true
+    },
+    {
+      "name": "card context delete synchronizes both windows and remains recoverable",
+      "passed": true
+    },
+    {
+      "name": "blank card context menu focuses add input and updates native pin",
       "passed": true
     }
   ],
