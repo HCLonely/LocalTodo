@@ -29,16 +29,16 @@ exe旁的`data/todo.db`保存任务与设置，`data/card.json`保存置顶偏�
 
 证据：desktop-smoke-results.json、portable-smoke-results.json、portable-release-verification.json。干净Windows10/11、真实睡眠恢复/勿扰与注销后登录启动仍待独立系统验收。
 
-ZIP大小：4,482,645字节；SHA-256：
+ZIP大小：4,684,307字节；SHA-256：
 
 ```
-00aef674dfd6586d59916ccbbe75db040843a304e9568677fda4ed39a216b142
+3650f64fdef51efc40876fa7370dfa86c850e923ad9cbfa615e9dd0b6a49d585
 ```
 
 EXE大小：14,439,424字节；SHA-256：
 
 ```
-66cc3d8acfbfaffbeb9d2093ad87cc464e3baf23943c10f3c3e5edc574870ed9
+4027babe981fcdd97f4b92167b65d81c17d56d42e238e21d5f5121f1a98a9914
 ```
 
 ![卡片界面](screenshots/desktop-card.png)
@@ -46,3 +46,5 @@ EXE大小：14,439,424字节；SHA-256：
 小卡片任务整行悬浮高亮已加入；浅色与深色主题均验证，包含复选框、标题、信息及行尾空白区域。便携EXE和ZIP同步更新。
 
 主界面禁用默认右键菜单；小卡片提供任务完成、编辑、移入回收站及通用管理菜单。两窗口禁用开发者工具与调试快捷键；菜单支持键盘操作、Esc/外部点击关闭及窗口边缘避让。
+
+小卡片采用紧凑布局：压缩顶部概览、筛选栏、任务行、底部输入区及右键菜单留白，任务文字字号保持13px；未设置任务信息时不占额外信息行。同一窗口可展示更多任务。生产构建和18项真实桌面检查通过。
