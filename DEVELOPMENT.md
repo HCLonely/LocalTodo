@@ -77,11 +77,11 @@ $env:PATH = "$env:CARGO_HOME/bin;$env:PATH"
 npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 ```
 
-提交版本修改后，推送与应用版本一致的标签。例如当前版本为 `1.0.0`：
+提交版本修改后，推送与应用版本一致的标签。例如当前版本为 `1.0.1`：
 
 ```powershell
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 版本不一致时构建脚本会报错，标签与应用版本不一致时工作流会提前终止。含 `-` 的版本标签发布为预发布版。已有 Release 再次运行会覆盖同名附件。
