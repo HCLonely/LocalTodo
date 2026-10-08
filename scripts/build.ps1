@@ -2,9 +2,14 @@ param(
  [switch]$SkipBuild,
  [string]$OutputDirectory='portable'
 )
-. "$PSScriptRoot/env.ps1"
-Set-Location (Split-Path -Parent $PSScriptRoot)
 $ErrorActionPreference='Stop'
+$projectRoot=Split-Path -Parent $PSScriptRoot
+Set-Location $projectRoot
+if (Test-Path -LiteralPath "$projectRoot/.tools/cargo/bin/cargo.exe") {
+ $env:CARGO_HOME="$projectRoot/.tools/cargo"
+ $env:RUSTUP_HOME="$projectRoot/.tools/rustup"
+ $env:PATH="$projectRoot/.tools/cargo/bin;$env:PATH"
+}
 $version=(Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
 $packageVersion=(Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
 $cargoPackage=Get-Content -LiteralPath src-tauri/Cargo.toml -Raw
@@ -12,6 +17,12 @@ $cargoVersion=[regex]::Match($cargoPackage,'(?m)^version\s*=\s*"([^"]+)"').Group
 if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') { throw 'Invalid application version' }
 if ($version -ne $packageVersion -or $version -ne $cargoVersion) { throw 'Versions in tauri.conf.json, package.json and src-tauri/Cargo.toml must match' }
 if (!$SkipBuild) {
+ if (!(Get-Command npm -ErrorAction SilentlyContinue)) { throw 'Node.js and npm are required to build' }
+ if (!(Get-Command cargo -ErrorAction SilentlyContinue)) { throw 'Rust and Cargo are required to build' }
+ if (!(Test-Path -LiteralPath node_modules/.bin/tauri.cmd)) {
+  npm ci --prefer-offline --no-audit --no-fund
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+ }
  npm run tauri build -- --no-bundle -- --locked
  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
