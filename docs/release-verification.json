@@ -1,9 +1,0 @@
-{
-  "at": "2026-10-08T05:36:52.844433+00:00",
-  "task_count": 0,
-  "series_count": 0,
-  "data_fingerprint_preserved": true,
-  "installed_binary_matches_release_with_nsis_tag": true,
-  "installer_size_bytes": 3265244,
-  "installer_sha256": "fd56902622a0508923dc3539d47f57587cd3e56e89e402360c379f0b11ba21b7"
-}

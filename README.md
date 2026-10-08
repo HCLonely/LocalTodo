@@ -4,7 +4,7 @@
 
 ## 下载与启动
 
-1. 在项目的 GitHub Releases 页面下载 `LocalTodo-版本号-windows-x64.zip`。
+1. 在[GitHub Releases](https://github.com/HCLonely/LocalTodo/releases) 页面下载 `LocalTodo-版本号-windows-x64.zip`。
 2. 解压整个压缩包，双击 `LocalTodo/local-todo.exe` 即可使用，无需安装。
 3. 机器需要安装 Microsoft Edge WebView2 Runtime。建议将程序放在有写入权限的普通文件夹中。
 
