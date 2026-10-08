@@ -38,6 +38,23 @@ npm ci
 
 `scripts/build.ps1`仅构建便携EXE和ZIP，不运行安装器。ZIP从独立空白目录打包，不包含工作目录里的用户数据。
 
+## GitHub Actions 自动构建与发布
+
+[ci.yml](.github/workflows/ci.yml)在推送main/master、提交到这些分支的PR及手动运行时构建Windows x64便携版；推送`v*`标签时自动构建并发布GitHub Release，附带ZIP及SHA-256文件。仅文档修改跳过构建。也可手动选择已有版本标签重新发布。
+
+流程不执行测试、fmt或Clippy；Tauri只执行一次前端生产构建和一次Rust release构建，不生成安装器。启用npm下载缓存、node_modules精确缓存（命中跳过npm ci）及Rust依赖/target编译缓存。仅安装最小Rust工具链，使用Cargo.lock锁定依赖；已压缩的ZIP上传时不再次压缩。同分支的新提交取消尚未结束的旧构建，版本标签发布不会被取消。首次构建仍需下载和编译依赖，后续耗时取决于缓存命中和修改范围。
+
+发布前同步修改`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`、`package.json`的版本，执行`npm install --package-lock-only --ignore-scripts`更新npm锁文件，并更新Cargo.lock中的应用版本；提交后推送与版本一致的标签。例如当前版本：
+
+```powershell
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+主分支/PR构建结果在Actions运行页的Artifacts下载，保留14天；版本标签的产物位于Releases。使用内置`GITHUB_TOKEN`，无需额外Token；仓库或组织策略需允许workflow使用contents写权限。工作流需先推送到GitHub，才能执行；手动入口要求工作流已存在于默认分支。
+
+本地仍使用`./scripts/build.ps1`，自动读取版本生成文件名。仅重打包现有release EXE可运行`./scripts/build.ps1 -SkipBuild -OutputDirectory .tools/package-preview`。CI缓存和发布命令依据[setup-node](https://github.com/actions/setup-node)、[Rust Cache](https://github.com/Swatinem/rust-cache)、[GitHub CLI](https://cli.github.com/manual/gh_release_create)官方说明配置。
+
 独立核心测试和性能测量：
 
 ```powershell
