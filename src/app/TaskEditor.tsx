@@ -1,17 +1,21 @@
+import { confirmAction } from './confirm';
 import { useEffect, useRef, useState } from 'react';
 import { X, Plus, Trash2, Repeat2, Bell, CalendarDays, ListChecks, Save } from 'lucide-react';
 import { emptyDraft, type Task, type TaskDraft } from '../features/tasks/types';
-export interface EditorProps { task: Task|null; today: string; initialDate?:string; defaultReminderTime?:string; onSave: (draft:TaskDraft,scope:'single'|'following')=>Promise<void>; onClose:()=>void }
-export default function TaskEditor({task,today,initialDate,defaultReminderTime,onSave,onClose}:EditorProps) {
+export interface EditorProps { task: Task|null; today: string; initialDate?:string; defaultReminderTime?:string; timezone?:string; onSave: (draft:TaskDraft,scope:'single'|'following')=>Promise<void>; onClose:()=>void; onGuardChange?:(guard:()=>Promise<boolean>)=>void }
+export default function TaskEditor({task,today,initialDate,defaultReminderTime,timezone,onSave,onClose,onGuardChange}:EditorProps) {
   const [draft,setDraft]=useState<TaskDraft>(()=>task?structuredClone(task.draft):{...emptyDraft(today,defaultReminderTime),due_date:initialDate||null});
   const [scope,setScope]=useState<'single'|'following'>('single');
   const [reminders,setReminders]=useState(draft.reminder_days.length>0);
   const [days,setDays]=useState(draft.reminder_days.length?draft.reminder_days.join(','):'0,1,3');
   const [busy,setBusy]=useState(false);const [error,setError]=useState('');
   const [newSubtask,setNewSubtask]=useState('');const titleRef=useRef<HTMLInputElement>(null);
-  const original=useRef(JSON.stringify(draft));
+  const original=useRef(JSON.stringify({draft,reminders,days,scope,newSubtask}));
   const set=<K extends keyof TaskDraft>(key:K,value:TaskDraft[K])=>setDraft(d=>({...d,[key]:value}));
-  const close=()=>{if(busy)return;if(JSON.stringify(draft)!==original.current&&!window.confirm('尚有未保存的修改，是否放弃？'))return;onClose();};
+  const confirming=useRef(false);
+  const canLeave=async()=>{if(busy||confirming.current)return false;confirming.current=true;try{return (JSON.stringify({draft,reminders,days,scope,newSubtask})===original.current||await confirmAction('尚有未保存的修改，是否放弃？'));}finally{confirming.current=false;}};
+  const close=async()=>{if(await canLeave())onClose();};
+  useEffect(()=>{onGuardChange?.(canLeave);});
   useEffect(()=>{titleRef.current?.focus();},[]);
   useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();close();}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);});
   async function submit(e:React.FormEvent){
@@ -26,10 +30,12 @@ export default function TaskEditor({task,today,initialDate,defaultReminderTime,o
       offsets=[...new Set(tokens.map(Number))].sort((a,b)=>a-b);
       if(draft.due_time&&draft.reminder_time.slice(0,5)>draft.due_time.slice(0,5)){setError('提醒时刻不能晚于截止时刻');return;}
     }
-    const next={...draft,title:draft.title.trim(),reminder_days:offsets};
+    const next={...draft,title:draft.title.trim(),reminder_days:offsets,subtasks:newSubtask.trim()?[...draft.subtasks,{title:newSubtask.trim(),completed:false}]:draft.subtasks};
     if(next.recurrence&&!next.due_date){setError('重复任务需要设置截止日期');return;}
     setBusy(true);try{await onSave(next,scope);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}
   }
+  const previewTokens=days.split(/[,，\s]+/).filter(Boolean);
+  const previewDates=reminders&&draft.due_date&&previewTokens.length&&previewTokens.every(v=>/^\d+$/.test(v)&&Number(v)<=365)?[...new Set(previewTokens.map(Number))].sort((a,b)=>b-a).map(offset=>{const date=new Date(draft.due_date!+'T12:00:00Z');date.setUTCDate(date.getUTCDate()-offset);return Number.isNaN(date.getTime())?'':date.toISOString().slice(0,10);}):[];
   function addSubtask(){if(!newSubtask.trim())return;set('subtasks',[...draft.subtasks,{title:newSubtask.trim(),completed:false}]);setNewSubtask('');}
   return <aside className="editor" aria-label={task?'编辑任务':'新建任务'}>
     <div className="panel-heading"><div><span className="eyebrow">TASK DETAILS</span><h2>{task?'编辑任务':'新建任务'}</h2></div><button className="icon-button" onClick={close} aria-label="关闭编辑" disabled={busy}><X size={20}/></button></div>
@@ -51,7 +57,7 @@ export default function TaskEditor({task,today,initialDate,defaultReminderTime,o
         </div>}
         {task?.series_id&&<label className="field">修改范围<select aria-label="修改范围" value={scope} onChange={e=>setScope(e.target.value as 'single'|'following')}><option value="single">仅本次任务</option><option value="following">本次及以后的未完成任务</option></select></label>}
         <div className="section-title"><Bell size={16}/><h3>截止提醒</h3><label className="switch-label"><input type="checkbox" aria-label="开启截止提醒" checked={reminders} onChange={e=>setReminders(e.target.checked)}/><span>{reminders?'已开启':'未开启'}</span></label></div>
-        {reminders&&<div className="repeat-details"><div className="field-pair"><label className="field">提前天数<input value={days} onChange={e=>setDays(e.target.value)} placeholder="0,1,3"/></label><label className="field">提醒时刻<input type="time" value={draft.reminder_time.slice(0,5)} onChange={e=>set('reminder_time',e.target.value+':00')}/></label></div><p className="helper">0 表示截止当天；多个天数用逗号分隔。错过的提醒恢复后合并通知。</p></div>}
+        {reminders&&<div className="repeat-details"><div className="field-pair"><label className="field">提前天数<input value={days} onChange={e=>setDays(e.target.value)} placeholder="0,1,3"/></label><label className="field">提醒时刻<input type="time" value={draft.reminder_time.slice(0,5)} onChange={e=>set('reminder_time',e.target.value+':00')}/></label></div><p className="helper">0 表示截止当天；多个天数用逗号分隔。错过的提醒恢复后合并通知。</p>{previewDates.length>0&&<p className="helper" aria-label="提醒日期预览">将在 {previewDates.slice(0,6).join("、")}{previewDates.length>6?` 等 ${previewDates.length} 个日期`:""} 的 {draft.reminder_time.slice(0,5)} 提醒（{timezone||"应用时区"}）。重复任务按每期截止日期重新计算。</p>}</div>}
         <div className="section-title"><ListChecks size={16}/><h3>子任务</h3><span className="muted">{draft.subtasks.filter(t=>t.completed).length}/{draft.subtasks.length}</span></div>
         <div className="subtask-list">{draft.subtasks.map((sub,i)=><div className="subtask" key={i}><input type="checkbox" aria-label={`完成子任务 ${sub.title}`} checked={sub.completed} onChange={e=>set('subtasks',draft.subtasks.map((s,j)=>j===i?{...s,completed:e.target.checked}:s))}/><input aria-label={`子任务 ${i+1}`} value={sub.title} onChange={e=>set('subtasks',draft.subtasks.map((s,j)=>j===i?{...s,title:e.target.value}:s))}/><button type="button" className="icon-button" aria-label={`删除子任务 ${sub.title}`} onClick={()=>set('subtasks',draft.subtasks.filter((_,j)=>j!==i))}><Trash2 size={15}/></button></div>)}</div>
         <div className="subtask-add"><input aria-label="新子任务" value={newSubtask} onChange={e=>setNewSubtask(e.target.value)} placeholder="添加一个小步骤" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addSubtask();}}}/><button type="button" aria-label="添加子任务" className="icon-button" onClick={addSubtask}><Plus size={18}/></button></div>

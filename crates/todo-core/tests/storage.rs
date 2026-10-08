@@ -262,3 +262,187 @@ fn restoring_an_old_series_does_not_notify_for_backfilled_history() {
         1
     );
 }
+
+#[test]
+fn editing_following_from_first_occurrence_keeps_archive_restorable() {
+    let mut store = Store::memory().unwrap();
+    let mut t = draft();
+    t.due_date = Some(d("2026-10-08"));
+    t.recurrence = Some(RecurrenceRule {
+        kind: "daily".into(),
+        start: d("2026-10-08"),
+        end: Some(d("2026-10-10")),
+        weekday: None,
+        month_day: None,
+    });
+    let first = store.save_task(None, t, "single", now()).unwrap();
+    let mut changed = first.draft.clone();
+    changed.title = "调整后的任务".into();
+    store
+        .save_task(Some(&first.id), changed, "following", now())
+        .unwrap();
+    let archive = store.export_json().unwrap();
+    assert!(store.restore_json(&archive, now()).is_ok());
+}
+
+fn daily(start: &str, end: &str) -> TaskDraft {
+    let mut t = draft();
+    t.due_date = Some(d(start));
+    t.recurrence = Some(RecurrenceRule {
+        kind: "daily".into(),
+        start: d(start),
+        end: Some(d(end)),
+        weekday: None,
+        month_day: None,
+    });
+    t
+}
+#[test]
+fn recovery_catches_up_all_batches_before_submitting_one_summary() {
+    let mut store = Store::memory().unwrap();
+    let mut t = daily("2023-01-01", "2025-12-31");
+    t.reminder_days = vec![0];
+    store
+        .save_task(
+            None,
+            t,
+            "single",
+            Utc.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap(),
+        )
+        .unwrap();
+    let mut submissions = 0;
+    let mut count = 0;
+    loop {
+        let result = store
+            .background_tick(now(), |batch| {
+                submissions += 1;
+                count = batch.task_ids.len();
+                Ok(())
+            })
+            .unwrap();
+        if !result.generation.has_more {
+            break;
+        }
+    }
+    assert_eq!(submissions, 1);
+    assert_eq!(count, 1096);
+    assert_eq!(
+        store.tick(now(), |_| panic!("remaining backlog")).unwrap(),
+        0
+    );
+}
+#[test]
+fn splitting_excludes_completed_future_occurrences_and_replaces_descendants() {
+    let mut store = Store::memory().unwrap();
+    let first = store
+        .save_task(None, daily("2026-10-08", "2026-10-12"), "single", now())
+        .unwrap();
+    store
+        .materialize_until(d("2026-10-12"), 100, now())
+        .unwrap();
+    let tasks = store.all_tasks().unwrap();
+    let done = tasks
+        .iter()
+        .find(|t| t.draft.due_date == Some(d("2026-10-11")))
+        .unwrap();
+    store.set_completed(&done.id, true, now()).unwrap();
+    let tenth = tasks
+        .iter()
+        .find(|t| t.draft.due_date == Some(d("2026-10-10")))
+        .unwrap();
+    let mut changed = tenth.draft.clone();
+    changed.title = "第二段".into();
+    store
+        .save_task(Some(&tenth.id), changed, "following", now())
+        .unwrap();
+    store
+        .materialize_until(d("2026-10-12"), 100, now())
+        .unwrap();
+    assert_eq!(
+        store
+            .all_tasks()
+            .unwrap()
+            .iter()
+            .filter(|t| !t.deleted && t.draft.due_date == Some(d("2026-10-11")))
+            .count(),
+        1
+    );
+    let ninth = store
+        .all_tasks()
+        .unwrap()
+        .into_iter()
+        .find(|t| !t.deleted && t.draft.due_date == Some(d("2026-10-09")))
+        .unwrap();
+    let mut changed = ninth.draft.clone();
+    changed.title = "重新安排".into();
+    store
+        .save_task(Some(&ninth.id), changed, "following", now())
+        .unwrap();
+    store
+        .materialize_until(d("2026-10-12"), 100, now())
+        .unwrap();
+    let active: Vec<_> = store
+        .all_tasks()
+        .unwrap()
+        .into_iter()
+        .filter(|t| !t.deleted)
+        .collect();
+    assert_eq!(active.len(), 5);
+    assert!(active.iter().any(|t| t.id == first.id));
+    assert_eq!(
+        active
+            .iter()
+            .filter(|t| !t.completed && t.draft.due_date.unwrap() >= d("2026-10-09"))
+            .count(),
+        3
+    );
+    let json = store.export_json().unwrap();
+    store.restore_json(&json, now()).unwrap();
+}
+#[test]
+fn timezone_change_does_not_rearm_a_submitted_offset() {
+    let mut store = Store::memory().unwrap();
+    let mut settings = store.settings().unwrap();
+    settings.timezone = "Asia/Shanghai".into();
+    store.update_settings(settings, now()).unwrap();
+    let mut t = draft();
+    t.due_date = Some(d("2026-10-08"));
+    t.reminder_days = vec![0];
+    store
+        .save_task(
+            None,
+            t,
+            "single",
+            Utc.with_ymd_and_hms(2026, 10, 8, 0, 0, 0).unwrap(),
+        )
+        .unwrap();
+    store
+        .tick(Utc.with_ymd_and_hms(2026, 10, 8, 1, 0, 0).unwrap(), |_| {
+            Ok(())
+        })
+        .unwrap();
+    let mut settings = store.settings().unwrap();
+    settings.timezone = "America/New_York".into();
+    store.update_settings(settings, now()).unwrap();
+    assert_eq!(
+        store
+            .tick(
+                Utc.with_ymd_and_hms(2026, 10, 8, 13, 0, 0).unwrap(),
+                |_| panic!("timezone must not replay submitted reminder")
+            )
+            .unwrap(),
+        0
+    );
+}
+#[test]
+fn invalid_series_cursor_is_rejected_before_replacing_data() {
+    let mut store = Store::memory().unwrap();
+    let t = store
+        .save_task(None, daily("2026-10-08", "2026-10-12"), "single", now())
+        .unwrap();
+    let mut archive: serde_json::Value =
+        serde_json::from_str(&store.export_json().unwrap()).unwrap();
+    archive["series"][0]["cursor"] = serde_json::json!("9998-12-31");
+    assert!(store.restore_json(&archive.to_string(), now()).is_err());
+    assert_eq!(store.get_task(&t.id).unwrap().draft.title, "报告");
+}

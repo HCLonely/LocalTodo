@@ -12,6 +12,7 @@ use todo_core::{invalid, AppResult, NotificationBatch, Store};
 pub struct AppState {
     pub store: Mutex<Store>,
     pub wake: (Mutex<bool>, Condvar),
+    pub scheduler_error: Mutex<Option<String>>,
 }
 impl AppState {
     pub fn changed(&self, app: &tauri::AppHandle) {
@@ -80,6 +81,7 @@ pub fn run() {
             let state = Arc::new(AppState {
                 store: Mutex::new(Store::open(&directory.join("todo.db"))?),
                 wake: (Mutex::new(false), Condvar::new()),
+                scheduler_error: Mutex::new(None),
             });
             app.manage(state.clone());
             let open = MenuItem::with_id(app, "open", "打开拾序", true, None::<&str>)?;
@@ -124,24 +126,26 @@ pub fn run() {
             std::thread::Builder::new()
                 .name("todo-reminders".into())
                 .spawn(move || loop {
-                    let mut delay = 30;
+                    let mut delay = 30_000;
                     match state.store.lock() {
                         Ok(mut store) => {
                             let now = Utc::now();
                             let result = (|| -> AppResult<()> {
-                                let horizon = store.generation_horizon(now, None)?;
-                                let generation = store.materialize_until(horizon, 100, now)?;
-                                store.tick(now, |batch| notify(&handle, batch))?;
-                                delay = if generation.has_more {
-                                    1
-                                } else {
-                                    store.next_wake_seconds(now)?
-                                };
+                                let report =
+                                    store.background_tick(now, |batch| notify(&handle, batch))?;
+                                delay = report.next_wake_millis;
                                 Ok(())
                             })();
                             if let Err(error) = result {
                                 eprintln!("Background Todo error: {error}");
+                                if let Ok(mut health) = state.scheduler_error.lock() {
+                                    *health = Some(error.to_string());
+                                }
                                 let _ = handle.emit("background_error", error.to_string());
+                            } else if let Ok(mut health) = state.scheduler_error.lock() {
+                                if health.take().is_some() {
+                                    let _ = handle.emit("background_recovered", ());
+                                }
                             }
                         }
                         Err(_) => break,
@@ -150,7 +154,11 @@ pub fn run() {
                     let _ = handle.emit("reminders_changed", ());
                     if let Ok(mut flag) = state.wake.0.lock() {
                         if !*flag {
-                            match state.wake.1.wait_timeout(flag, Duration::from_secs(delay)) {
+                            match state
+                                .wake
+                                .1
+                                .wait_timeout(flag, Duration::from_millis(delay))
+                            {
                                 Ok((next, _)) => flag = next,
                                 Err(_) => break,
                             }

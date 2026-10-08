@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-08T05:36:44.5510855Z",
+  "process_id": 60748,
+  "interactive_millis": 866,
+  "close_retains_tray": true,
+  "single_instance_restores_window": true,
+  "installed_notification_submitted": true,
+  "executable_sha256": "953758772E0BA5F370EA13E2628808590915DE683C4C6069F767E2F3D5D4CFFA"
+}

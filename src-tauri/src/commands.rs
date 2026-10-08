@@ -52,10 +52,16 @@ pub async fn snapshot(
     state: State<'_, Arc<AppState>>,
     query: Query,
 ) -> Result<Snapshot, CommandError> {
-    with_store(state.inner().clone(), move |store| {
+    let mut result = with_store(state.inner().clone(), move |store| {
         store.snapshot(&query, Utc::now())
     })
-    .await
+    .await?;
+    result.scheduler_error = state
+        .scheduler_error
+        .lock()
+        .map_err(|_| platform_error("后台提醒状态不可用"))?
+        .clone();
+    Ok(result)
 }
 #[tauri::command]
 pub async fn save_task(
@@ -152,6 +158,7 @@ pub async fn test_notification(app: tauri::AppHandle) -> Result<(), CommandError
                 created_at: Utc::now(),
                 submitted: false,
                 error: None,
+                retry_exhausted: false,
                 read: true,
             },
         )
@@ -199,7 +206,9 @@ pub async fn export_backup(
         if kind == "sqlite" {
             store.backup_sqlite(&path)
         } else {
-            std::fs::write(path, store.export_json()?).map_err(Into::into)
+            use std::io::Write;
+            let json = store.export_json()?;
+            atomic_write_with(&path, |file| file.write_all(json.as_bytes()))
         }
     })
     .await?;

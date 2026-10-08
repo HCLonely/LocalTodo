@@ -202,6 +202,10 @@ impl Settings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Series {
     pub id: String,
+    #[serde(default)]
+    pub root_id: Option<String>,
+    #[serde(default)]
+    pub excluded_dates: std::collections::BTreeSet<NaiveDate>,
     pub template: TaskDraft,
     pub rule: RecurrenceRule,
     pub cursor: Option<NaiveDate>,
@@ -218,6 +222,8 @@ pub struct NotificationBatch {
     pub created_at: DateTime<Utc>,
     pub submitted: bool,
     pub error: Option<String>,
+    #[serde(default)]
+    pub retry_exhausted: bool,
     pub read: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -235,6 +241,12 @@ pub struct Snapshot {
     pub settings: Settings,
     pub today: NaiveDate,
     pub generation_pending: bool,
+    pub scheduler_error: Option<String>,
+}
+pub struct BackgroundReport {
+    pub generation: GenerationProgress,
+    pub submitted: usize,
+    pub next_wake_millis: u64,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Query {

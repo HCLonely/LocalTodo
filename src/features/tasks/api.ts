@@ -13,5 +13,5 @@ export const api={
  restore:()=>call<number|null>('restore_backup'),
  testNotification:()=>call<void>('test_notification'),
  markRead:()=>call<void>('mark_inbox_read'),
- subscribe:(event:string,callback:()=>void)=>listen(event,callback),
+ subscribe:(event:string,callback:(payload?:unknown)=>void)=>listen(event,message=>callback(message.payload)),
 };

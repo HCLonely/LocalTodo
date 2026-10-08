@@ -59,6 +59,16 @@ fn rebuild_jobs(
     now: DateTime<Utc>,
     include_past: bool,
 ) -> AppResult<()> {
+    rebuild_jobs_preserving(conn, t, zone, now, include_past, &HashSet::new())
+}
+fn rebuild_jobs_preserving(
+    conn: &Connection,
+    t: &Task,
+    zone: chrono_tz::Tz,
+    now: DateTime<Utc>,
+    include_past: bool,
+    submitted: &HashSet<u16>,
+) -> AppResult<()> {
     conn.execute(
         "UPDATE jobs SET status='cancelled' WHERE task_id=? AND status='pending'",
         [&t.id],
@@ -68,6 +78,10 @@ fn rebuild_jobs(
     }
     let mut missed = false;
     for (offset, at) in reminder_times(&t.draft, zone)? {
+        if submitted.contains(&offset) {
+            conn.execute("INSERT OR IGNORE INTO jobs(id,task_id,revision,offset_days,trigger_at,status) VALUES(?,?,?,?,?,'submitted')",params![Uuid::new_v4().to_string(),t.id,t.revision,offset,at.timestamp()])?;
+            continue;
+        }
         let past = at < now;
         missed |= past;
         conn.execute("INSERT OR IGNORE INTO jobs(id,task_id,revision,offset_days,trigger_at,status) VALUES(?,?,?,?,?,?)",params![Uuid::new_v4().to_string(),t.id,t.revision,offset,at.timestamp(),if past&&!include_past{"cancelled"}else{"pending"}])?;
@@ -83,6 +97,7 @@ fn rebuild_jobs(
                 created_at: now,
                 submitted: false,
                 error: None,
+                retry_exhausted: false,
                 read: false,
             },
         )?;
@@ -197,18 +212,43 @@ impl Store {
                 }
                 let json: String =
                     tx.query_row("SELECT payload FROM series WHERE id=?", [sid], |r| r.get(0))?;
-                let mut series: Series = serde_json::from_str(&json)?;
+                let series: Series = serde_json::from_str(&json)?;
                 let cutoff = old
                     .occurrence_date
                     .ok_or_else(|| invalid("重复实例缺少日期"))?;
-                series.rule.end = cutoff.pred_opt();
-                if cutoff <= series.rule.start {
-                    series.active = false;
+                let root = series.root_id.clone().unwrap_or(series.id.clone());
+                let related: Vec<Series> = load_payloads(&tx, "series")?;
+                let mut related_ids = HashSet::new();
+                for mut member in related
+                    .into_iter()
+                    .filter(|s| s.root_id.as_ref().unwrap_or(&s.id) == &root)
+                {
+                    related_ids.insert(member.id.clone());
+                    if cutoff <= member.rule.start {
+                        member.active = false;
+                    } else {
+                        member.rule.end =
+                            Some(member.rule.end.map_or(cutoff.pred_opt().unwrap(), |end| {
+                                end.min(cutoff.pred_opt().unwrap())
+                            }));
+                    }
+                    write_series(&tx, &member)?;
                 }
-                write_series(&tx, &series)?;
                 let tasks: Vec<Task> = load_payloads(&tx, "tasks")?;
+                let exclusions = tasks
+                    .iter()
+                    .filter(|t| {
+                        t.series_id
+                            .as_ref()
+                            .is_some_and(|id| related_ids.contains(id))
+                            && t.completed
+                    })
+                    .filter_map(|t| t.occurrence_date)
+                    .collect();
                 for mut t in tasks {
-                    if t.series_id.as_ref() == Some(sid)
+                    if t.series_id
+                        .as_ref()
+                        .is_some_and(|id| related_ids.contains(id))
                         && t.occurrence_date.is_some_and(|d| d >= cutoff)
                         && !t.completed
                         && !t.deleted
@@ -224,7 +264,7 @@ impl Store {
                     rule.start = cutoff;
                     rule.validate()?;
                 }
-                Self::create_in_transaction(&tx, draft, now, zone)?
+                Self::create_with_lineage(&tx, draft, now, zone, Some(root), exclusions)?
             } else {
                 if old.series_id.is_some() && draft.recurrence != old.draft.recurrence {
                     return Err(invalid("修改重复规则请选择“本次及以后”"));
@@ -257,11 +297,30 @@ impl Store {
         now: DateTime<Utc>,
         zone: chrono_tz::Tz,
     ) -> AppResult<Task> {
+        Self::create_with_lineage(tx, draft, now, zone, None, Default::default())
+    }
+    fn create_with_lineage(
+        tx: &Transaction<'_>,
+        draft: TaskDraft,
+        now: DateTime<Utc>,
+        zone: chrono_tz::Tz,
+        root_id: Option<String>,
+        excluded_dates: std::collections::BTreeSet<NaiveDate>,
+    ) -> AppResult<Task> {
         let task = if let Some(rule) = draft.recurrence.clone() {
-            let first = occurrence_on_or_after(&rule, rule.start)?
+            let mut first = occurrence_on_or_after(&rule, rule.start)?
                 .ok_or_else(|| invalid("结束日期范围内没有重复任务"))?;
+            while excluded_dates.contains(&first) {
+                first = occurrence_on_or_after(
+                    &rule,
+                    first.succ_opt().ok_or_else(|| invalid("日期溢出"))?,
+                )?
+                .ok_or_else(|| invalid("该范围内的重复任务均已完成"))?;
+            }
             let series = Series {
                 id: Uuid::new_v4().to_string(),
+                root_id,
+                excluded_dates,
                 template: draft,
                 rule,
                 cursor: Some(first),
@@ -346,7 +405,7 @@ impl Store {
                     params![s.id, date.to_string()],
                     |r| r.get(0),
                 )?;
-                if !exists {
+                if !exists && !s.excluded_dates.contains(&date) {
                     let t = instance(&s, date, now)?;
                     write_task(&tx, &t)?;
                     rebuild_jobs(&tx, &t, zone, now, true)?;
@@ -482,6 +541,30 @@ impl Store {
             settings,
             today,
             generation_pending: progress.has_more,
+            scheduler_error: None,
+        })
+    }
+    pub fn background_tick(
+        &mut self,
+        now: DateTime<Utc>,
+        notify: impl FnMut(&NotificationBatch) -> AppResult<()>,
+    ) -> AppResult<BackgroundReport> {
+        let horizon = self.generation_horizon(now, None)?;
+        let generation = self.materialize_until(horizon, 100, now)?;
+        let submitted = if generation.has_more {
+            0
+        } else {
+            self.tick(now, notify)?
+        };
+        let next_wake_millis = if generation.has_more {
+            100
+        } else {
+            self.next_wake_seconds(now)? * 1000
+        };
+        Ok(BackgroundReport {
+            generation,
+            submitted,
+            next_wake_millis,
         })
     }
     pub fn tick(
@@ -489,7 +572,7 @@ impl Store {
         now: DateTime<Utc>,
         mut notify: impl FnMut(&NotificationBatch) -> AppResult<()>,
     ) -> AppResult<usize> {
-        let mut stmt=self.conn.prepare("SELECT id,task_id,revision,attempts,batch_id FROM jobs WHERE status='pending' AND trigger_at<=? AND (retry_at IS NULL OR retry_at<=?) ORDER BY trigger_at LIMIT 1000")?;
+        let mut stmt=self.conn.prepare("SELECT id,task_id,revision,attempts,batch_id FROM jobs WHERE status='pending' AND trigger_at<=? AND (retry_at IS NULL OR retry_at<=?) ORDER BY trigger_at")?;
         let rows: Vec<(String, String, u32, u32, Option<String>)> = stmt
             .query_map(params![now.timestamp(), now.timestamp()], |r| {
                 Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
@@ -539,6 +622,7 @@ impl Store {
             created_at: now,
             submitted: false,
             error: None,
+            retry_exhausted: false,
             read: false,
         };
         {
@@ -556,6 +640,7 @@ impl Store {
         let success = result.is_ok();
         batch.submitted = success;
         batch.error = result.err().map(|e| e.to_string());
+        batch.retry_exhausted = !success && valid.iter().all(|row| row.3 >= 3);
         let tx = self.conn.transaction()?;
         write_inbox(&tx, &batch)?;
         for row in valid {
@@ -598,9 +683,14 @@ impl Store {
             [serde_json::to_string(&settings)?],
         )?;
         for mut t in tasks {
+            let mut query = tx.prepare("SELECT offset_days FROM jobs WHERE task_id=? AND revision=? AND status='submitted'")?;
+            let submitted = query
+                .query_map(params![t.id, t.revision], |r| r.get::<_, u16>(0))?
+                .collect::<Result<HashSet<_>, _>>()?;
+            drop(query);
             t.revision += 1;
             write_task(&tx, &t)?;
-            rebuild_jobs(&tx, &t, settings.zone()?, now, false)?;
+            rebuild_jobs_preserving(&tx, &t, settings.zone()?, now, false, &submitted)?;
         }
         tx.commit()?;
         Ok(())
@@ -653,6 +743,56 @@ impl Store {
                 .checked_add(1)
                 .ok_or_else(|| invalid("任务版本溢出"))?;
         }
+        for s in &archive.series {
+            if s.root_id
+                .as_ref()
+                .is_some_and(|id| !series_ids.contains(id))
+            {
+                return Err(invalid("备份系列来源无效"));
+            }
+            for date in &s.excluded_dates {
+                valid_date(*date)?;
+            }
+            if let Some(cursor) = s.cursor {
+                valid_date(cursor)?;
+                let markers: HashSet<_> = archive
+                    .tasks
+                    .iter()
+                    .filter(|t| t.series_id.as_ref() == Some(&s.id))
+                    .filter_map(|t| t.occurrence_date)
+                    .chain(s.excluded_dates.iter().copied())
+                    .collect();
+                let mut rule = s.rule.clone();
+                // A split may truncate the rule while retaining already materialized historical records.
+                rule.end = None;
+                let mut date = occurrence_on_or_after(&rule, rule.start)?;
+                let mut checked = 0;
+                let mut covered_cursor = false;
+                while let Some(current) = date {
+                    if current > cursor {
+                        break;
+                    }
+                    if checked > markers.len() || !markers.contains(&current) {
+                        return Err(invalid("备份系列生成进度缺少实例记录"));
+                    }
+                    checked += 1;
+                    covered_cursor = current == cursor;
+                    date = occurrence_on_or_after(
+                        &rule,
+                        current.succ_opt().ok_or_else(|| invalid("日期溢出"))?,
+                    )?;
+                }
+                if !covered_cursor {
+                    return Err(invalid("备份系列生成进度无效"));
+                }
+            } else if archive
+                .tasks
+                .iter()
+                .any(|t| t.series_id.as_ref() == Some(&s.id))
+            {
+                return Err(invalid("备份系列缺少生成进度"));
+            }
+        }
         // Keep a recovery snapshot before replacement. In-memory stores use an in-memory snapshot.
         let recovery_path = self.conn.path().filter(|p| !p.is_empty()).map(|p| {
             Path::new(p).with_extension(format!(
@@ -694,4 +834,19 @@ impl Store {
         )?;
         Ok(())
     }
+}
+/// Write beside the destination, then atomically replace it only after a complete, synced write.
+pub fn atomic_write_with(
+    path: &Path,
+    write: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
+) -> AppResult<()> {
+    use std::io::Write;
+    let mut temporary = tempfile::NamedTempFile::new_in(path.parent().unwrap_or(Path::new(".")))?;
+    write(temporary.as_file_mut())?;
+    temporary.flush()?;
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist(path)
+        .map_err(|error| AppError::Io(error.error))?;
+    Ok(())
 }

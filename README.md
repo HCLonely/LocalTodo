@@ -4,7 +4,7 @@
 
 ## 使用
 
-安装包构建在 `target/release/bundle/nsis/`。安装后从开始菜单启动 LocalTodo。
+首版安装包：[`LocalTodo_0.1.0_x64-setup.exe`](target/release/bundle/nsis/LocalTodo_0.1.0_x64-setup.exe)。本机已安装，可从开始菜单启动 LocalTodo。发布与校验说明见[release.md](docs/release.md)。
 
 - 新建任务：点击“新建任务”，或按 `Ctrl+N`。
 - 安排到今天：只改变计划日期，不改变截止日期。
@@ -58,4 +58,10 @@ npm run tauri build -- --debug --no-bundle
 - `src`：中文界面、任务详情、设置、提醒中心与交互测试。
 - `docs`：已确认方案、开发记录、验收结果与界面截图。
 
-首版不包含云同步、独立Windows服务或通知点击跳转；关机/主动退出时不发送提醒。公开分发前需完成干净Windows 10/11机器、真实睡眠恢复、通知关闭/勿扰、升级保留数据等系统验收；代码自动化测试不能代替这些检查。
+首版不包含云同步、独立Windows服务或通知点击跳转；关机/主动退出时不发送提醒。已通过20项Rust测试、11项前端测试和9项真实桌面检查；本机安装、关闭驻留、单实例及通知提交通过。公开分发前仍需完成干净Windows 10/11机器、真实睡眠恢复、通知关闭/勿扰、登录启动及含大量数据的跨版本升级验收，详见[acceptance.md](docs/acceptance.md)。
+
+界面截图：
+
+![浅色界面](docs/screenshots/desktop-light.png)
+
+安装版检查（先退出当前实例再执行）：`./scripts/installed-smoke.ps1`。该脚本在检查完成后保留程序运行；原生确认测试通过Windows UI Automation按按钮。数据库指纹辅助脚本需要可用的Python3与sqlite3，日常开发和构建无需Python。

@@ -1,8 +1,12 @@
 {
-  "at": "2026-10-08T04:59:32.557Z",
+  "at": "2026-10-08T05:34:47.035Z",
   "results": [
     {
       "name": "native window loads SQLite-backed empty state",
+      "passed": true
+    },
+    {
+      "name": "switching editor protects unsaved native-window drafts",
       "passed": true
     },
     {
@@ -27,6 +31,10 @@
     },
     {
       "name": "search filters native query results",
+      "passed": true
+    },
+    {
+      "name": "Windows notification API accepts a test notification",
       "passed": true
     }
   ],
