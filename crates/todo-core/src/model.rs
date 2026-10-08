@@ -206,6 +206,8 @@ pub struct Series {
     pub rule: RecurrenceRule,
     pub cursor: Option<NaiveDate>,
     pub active: bool,
+    #[serde(default)]
+    pub reminder_not_before: Option<DateTime<Utc>>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationBatch {

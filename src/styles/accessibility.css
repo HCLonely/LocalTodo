@@ -1,0 +1,4 @@
+.primary,.day-chip.is-today,.brand-icon,.active .nav-count{color:var(--on-accent)}
+.day-chip.is-today span{color:var(--on-accent);opacity:.85}
+.day-chip.is-today i{background:var(--on-accent)}
+html[data-theme=dark] .shortcut{border-color:#18223b50}

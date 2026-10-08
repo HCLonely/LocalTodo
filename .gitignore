@@ -6,7 +6,8 @@ src-tauri/target/
 .superpowers/
 test-results/
 playwright-report/
+src-tauri/gen/
+*.tsbuildinfo
 *.db
 *.db-shm
 *.db-wal
-

@@ -1,0 +1,244 @@
+use crate::desktop::{notify, AppState};
+use chrono::Utc;
+use serde::Serialize;
+use std::{io::Read, sync::Arc};
+use tauri::{Manager, State};
+use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_dialog::DialogExt;
+use todo_core::*;
+
+#[derive(Debug, Serialize)]
+pub struct CommandError {
+    code: &'static str,
+    message: String,
+}
+impl From<AppError> for CommandError {
+    fn from(e: AppError) -> Self {
+        Self {
+            code: match &e {
+                AppError::Validation(_) => "validation",
+                AppError::NotFound => "not_found",
+                AppError::Database(_) => "database",
+                AppError::Io(_) => "io",
+                AppError::Json(_) => "invalid_data",
+            },
+            message: e.to_string(),
+        }
+    }
+}
+fn platform_error(message: impl ToString) -> CommandError {
+    CommandError {
+        code: "platform",
+        message: message.to_string(),
+    }
+}
+async fn with_store<T: Send + 'static>(
+    state: Arc<AppState>,
+    action: impl FnOnce(&mut Store) -> AppResult<T> + Send + 'static,
+) -> Result<T, CommandError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut store = state
+            .store
+            .lock()
+            .map_err(|_| invalid("数据库服务不可用，请重新启动程序"))?;
+        action(&mut store)
+    })
+    .await
+    .map_err(platform_error)?
+    .map_err(Into::into)
+}
+#[tauri::command]
+pub async fn snapshot(
+    state: State<'_, Arc<AppState>>,
+    query: Query,
+) -> Result<Snapshot, CommandError> {
+    with_store(state.inner().clone(), move |store| {
+        store.snapshot(&query, Utc::now())
+    })
+    .await
+}
+#[tauri::command]
+pub async fn save_task(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    id: Option<String>,
+    draft: TaskDraft,
+    scope: String,
+) -> Result<Task, CommandError> {
+    let task = with_store(state.inner().clone(), move |store| {
+        store.save_task(id.as_deref(), draft, &scope, Utc::now())
+    })
+    .await?;
+    state.changed(&app);
+    Ok(task)
+}
+#[tauri::command]
+pub async fn set_completed(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    id: String,
+    value: bool,
+) -> Result<(), CommandError> {
+    with_store(state.inner().clone(), move |store| {
+        store.set_completed(&id, value, Utc::now()).map(|_| ())
+    })
+    .await?;
+    state.changed(&app);
+    Ok(())
+}
+#[tauri::command]
+pub async fn set_deleted(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    id: String,
+    value: bool,
+) -> Result<(), CommandError> {
+    with_store(state.inner().clone(), move |store| {
+        store.set_deleted(&id, value, Utc::now())
+    })
+    .await?;
+    state.changed(&app);
+    Ok(())
+}
+#[tauri::command]
+pub async fn mark_inbox_read(state: State<'_, Arc<AppState>>) -> Result<(), CommandError> {
+    with_store(state.inner().clone(), |store| store.mark_inbox_read()).await
+}
+#[tauri::command]
+pub async fn update_settings(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    settings: Settings,
+) -> Result<(), CommandError> {
+    settings.validate()?;
+    let app_for_worker = app.clone();
+    with_store(state.inner().clone(), move |store| {
+        let old = store.settings()?;
+        let launcher = app_for_worker.autolaunch();
+        let previous = launcher.is_enabled().map_err(|e| invalid(&e.to_string()))?;
+        if settings.autostart != previous {
+            if settings.autostart {
+                launcher.enable()
+            } else {
+                launcher.disable()
+            }
+            .map_err(|e| invalid(&format!("修改登录启动失败：{e}")))?;
+        }
+        if let Err(error) = store.update_settings(settings, Utc::now()) {
+            if previous {
+                let _ = launcher.enable();
+            } else {
+                let _ = launcher.disable();
+            }
+            let _ = old;
+            return Err(error);
+        }
+        Ok(())
+    })
+    .await?;
+    state.changed(&app);
+    Ok(())
+}
+#[tauri::command]
+pub async fn test_notification(app: tauri::AppHandle) -> Result<(), CommandError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        notify(
+            &app,
+            &NotificationBatch {
+                id: "test".into(),
+                title: "拾序提醒已准备好".into(),
+                body: "这是一次测试通知。关闭窗口后，拾序仍会在托盘中提醒你。".into(),
+                task_ids: vec![],
+                created_at: Utc::now(),
+                submitted: false,
+                error: None,
+                read: true,
+            },
+        )
+    })
+    .await
+    .map_err(platform_error)?
+    .map_err(Into::into)
+}
+#[tauri::command]
+pub async fn export_backup(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    kind: String,
+) -> Result<Option<String>, CommandError> {
+    if !["json", "sqlite"].contains(&kind.as_str()) {
+        return Err(platform_error("备份格式无效"));
+    }
+    let handle = app.clone();
+    let extension = if kind == "json" { "json" } else { "db" };
+    let file = tauri::async_runtime::spawn_blocking(move || {
+        handle
+            .dialog()
+            .file()
+            .set_title("导出拾序备份")
+            .add_filter("拾序备份", &[extension])
+            .set_file_name(format!(
+                "LocalTodo-{}.{}",
+                Utc::now().format("%Y%m%d-%H%M%S"),
+                extension
+            ))
+            .blocking_save_file()
+    })
+    .await
+    .map_err(platform_error)?;
+    let Some(file) = file else { return Ok(None) };
+    let path = file.into_path().map_err(platform_error)?;
+    let result = path.display().to_string();
+    let protected = app.path().app_data_dir().map_err(platform_error)?;
+    with_store(state.inner().clone(), move |store| {
+        if path.starts_with(&protected) {
+            return Err(invalid(
+                "请将导出文件保存到应用数据目录以外，避免覆盖当前数据",
+            ));
+        }
+        if kind == "sqlite" {
+            store.backup_sqlite(&path)
+        } else {
+            std::fs::write(path, store.export_json()?).map_err(Into::into)
+        }
+    })
+    .await?;
+    Ok(Some(result))
+}
+#[tauri::command]
+pub async fn restore_backup(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Option<usize>, CommandError> {
+    let handle = app.clone();
+    let file = tauri::async_runtime::spawn_blocking(move || {
+        handle
+            .dialog()
+            .file()
+            .set_title("恢复拾序JSON备份")
+            .add_filter("拾序JSON备份", &["json"])
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(platform_error)?;
+    let Some(file) = file else { return Ok(None) };
+    let path = file.into_path().map_err(platform_error)?;
+    let count = with_store(state.inner().clone(), move |store| {
+        let mut json = String::new();
+        std::fs::File::open(path)?
+            .take(100 * 1024 * 1024 + 1)
+            .read_to_string(&mut json)?;
+        // Restoring task data must not silently enable startup from an imported preference.
+        let mut value: serde_json::Value = serde_json::from_str(&json)?;
+        if let Some(settings) = value.get_mut("settings").and_then(|v| v.as_object_mut()) {
+            settings.insert(
+                "autostart".into(),
+                serde_json::Value::Bool(store.settings()?.autostart),
+            );
+        }
+        store.restore_json(&serde_json::to_string(&value)?, Utc::now())
+    })
+    .await?;
+    state.changed(&app);
+    Ok(Some(count))
+}

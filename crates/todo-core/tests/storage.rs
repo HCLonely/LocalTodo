@@ -216,3 +216,49 @@ fn read_only_database_reports_failed_save() {
     assert!(store.save_task(None, draft(), "single", now()).is_err());
     assert_eq!(store.all_tasks().unwrap().len(), 0);
 }
+
+#[test]
+fn restoring_an_old_series_does_not_notify_for_backfilled_history() {
+    let mut store = Store::memory().unwrap();
+    let mut t = draft();
+    t.due_date = Some(d("2026-01-01"));
+    t.reminder_days = vec![0];
+    t.recurrence = Some(RecurrenceRule {
+        kind: "daily".into(),
+        start: d("2026-01-01"),
+        end: Some(d("2026-10-09")),
+        weekday: None,
+        month_day: None,
+    });
+    store
+        .save_task(
+            None,
+            t,
+            "single",
+            Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        )
+        .unwrap();
+    let json = store.export_json().unwrap();
+    store.restore_json(&json, now()).unwrap();
+    while store
+        .materialize_until(d("2026-10-09"), 100, now())
+        .unwrap()
+        .has_more
+    {}
+    assert_eq!(
+        store
+            .tick(now(), |_| panic!(
+                "old backup must not replay historical reminders"
+            ))
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        store
+            .tick(Utc.with_ymd_and_hms(2026, 10, 9, 2, 0, 0).unwrap(), |_| Ok(
+                ()
+            ))
+            .unwrap(),
+        1
+    );
+}

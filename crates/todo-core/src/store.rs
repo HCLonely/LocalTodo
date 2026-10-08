@@ -157,7 +157,7 @@ impl Store {
     }
     pub fn inbox(&self) -> AppResult<Vec<NotificationBatch>> {
         let mut items: Vec<NotificationBatch> = load_payloads(&self.conn, "inbox")?;
-        items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        items.sort_by_key(|b| std::cmp::Reverse(b.created_at));
         items.truncate(100);
         Ok(items)
     }
@@ -191,11 +191,10 @@ impl Store {
         }
         let tx = self.conn.transaction()?;
         let task = if let Some(mut old) = old {
-            if scope == "following" && old.series_id.is_some() {
+            if let ("following", Some(sid)) = (scope, old.series_id.as_ref()) {
                 if old.completed {
                     return Err(invalid("已完成任务只能编辑本次，不能改变历史系列"));
                 }
-                let sid = old.series_id.as_ref().unwrap();
                 let json: String =
                     tx.query_row("SELECT payload FROM series WHERE id=?", [sid], |r| r.get(0))?;
                 let mut series: Series = serde_json::from_str(&json)?;
@@ -267,6 +266,7 @@ impl Store {
                 rule,
                 cursor: Some(first),
                 active: true,
+                reminder_not_before: None,
             };
             let t = instance(&series, first, now)?;
             write_series(tx, &series)?;
@@ -350,6 +350,12 @@ impl Store {
                     let t = instance(&s, date, now)?;
                     write_task(&tx, &t)?;
                     rebuild_jobs(&tx, &t, zone, now, true)?;
+                    if let Some(cutoff) = s.reminder_not_before {
+                        tx.execute(
+                            "UPDATE jobs SET status='cancelled' WHERE task_id=? AND trigger_at<?",
+                            params![t.id, cutoff.timestamp()],
+                        )?;
+                    }
                     created += 1;
                 }
                 s.cursor = Some(date);
@@ -620,6 +626,7 @@ impl Store {
         let mut series_ids = HashSet::new();
         let mut occurrences = HashSet::new();
         for s in &mut archive.series {
+            s.reminder_not_before = Some(now);
             Uuid::parse_str(&s.id).map_err(|_| invalid("备份系列ID无效"))?;
             s.rule.validate()?;
             s.template.validate()?;
