@@ -11,6 +11,8 @@ use todo_core::{invalid, AppResult, NotificationBatch, Store};
 
 pub struct AppState {
     pub store: Mutex<Store>,
+    pub data_directory: std::path::PathBuf,
+    pub card_pinned: Mutex<bool>,
     pub wake: (Mutex<bool>, Condvar),
     pub scheduler_error: Mutex<Option<String>>,
 }
@@ -31,7 +33,7 @@ pub fn notify(app: &tauri::AppHandle, b: &NotificationBatch) -> AppResult<()> {
         .show()
         .map_err(|e| invalid(&format!("系统通知提交失败：{e}")))
 }
-fn show(app: &tauri::AppHandle) {
+pub fn show(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
@@ -39,21 +41,37 @@ fn show(app: &tauri::AppHandle) {
     }
 }
 pub fn run() {
-    let context = tauri::generate_context!();
-    #[cfg(debug_assertions)]
-    let context = {
-        let mut context = context;
-        if std::env::var_os("LOCALTODO_TEST_DATA_DIR").is_some() {
-            context.config_mut().app.windows[0].additional_browser_args = Some("--remote-debugging-port=9222 --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection".into());
-            context.config_mut().app.windows[0].data_directory =
-                std::env::var_os("LOCALTODO_TEST_DATA_DIR")
-                    .map(std::path::PathBuf::from)
-                    .map(|p| p.join("webview"));
+    let mut context = tauri::generate_context!();
+    let directory = match std::env::current_exe()
+        .map_err(|e| e.to_string())
+        .and_then(|exe| crate::portable::data_directory(&exe))
+    {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
         }
-        context
     };
+    #[cfg(debug_assertions)]
+    let directory = std::env::var_os("LOCALTODO_TEST_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or(directory);
+    let windows = context.config().app.windows.clone();
+    // Absolute config dataDirectory paths are ignored by Tauri; set them explicitly on builders.
+    for window in &mut context.config_mut().app.windows {
+        window.create = false;
+    }
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _| {
+            if args.iter().any(|a| a == "--card") {
+                if let Some(card) = app.get_webview_window("card") {
+                    let _ = card.show();
+                    let _ = card.set_focus();
+                }
+            } else {
+                show(app);
+            }
+        }))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
@@ -69,31 +87,56 @@ pub fn run() {
             crate::commands::update_settings,
             crate::commands::test_notification,
             crate::commands::export_backup,
-            crate::commands::restore_backup
+            crate::commands::restore_backup,
+            crate::commands::open_card,
+            crate::commands::hide_card,
+            crate::commands::card_pin,
+            crate::commands::set_card_pin,
+            crate::commands::open_main,
+            crate::commands::edit_in_main
         ])
-        .setup(|app| {
-            let directory = app.path().app_data_dir()?;
-            #[cfg(debug_assertions)]
-            let directory = std::env::var_os("LOCALTODO_TEST_DATA_DIR")
-                .map(std::path::PathBuf::from)
-                .unwrap_or(directory);
+        .setup(move |app| {
             std::fs::create_dir_all(&directory)?;
+            let pinned = std::fs::read_to_string(directory.join("card.json"))
+                .ok()
+                .and_then(|json| serde_json::from_str::<bool>(&json).ok())
+                .unwrap_or(true);
             let state = Arc::new(AppState {
+                data_directory: directory.clone(),
+                card_pinned: Mutex::new(pinned),
                 store: Mutex::new(Store::open(&directory.join("todo.db"))?),
                 wake: (Mutex::new(false), Condvar::new()),
                 scheduler_error: Mutex::new(None),
             });
             app.manage(state.clone());
+            for config in &windows {
+                let mut builder = tauri::WebviewWindowBuilder::from_config(app, config)?
+                    .data_directory(directory.join("webview"));
+                if config.label == "card" { builder = builder.always_on_top(pinned); }
+                #[cfg(debug_assertions)]
+                if std::env::var_os("LOCALTODO_TEST_DATA_DIR").is_some() {
+                    builder=builder.additional_browser_args("--remote-debugging-port=9222 --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection");
+                }
+                builder.build()?;
+            }
+
             let open = MenuItem::with_id(app, "open", "打开拾序", true, None::<&str>)?;
             let new = MenuItem::with_id(app, "new", "新建任务", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出（暂停提醒）", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open, &new, &quit])?;
+            let card = MenuItem::with_id(app, "card", "桌面小卡片", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&open, &card, &new, &quit])?;
             let mut tray = TrayIconBuilder::new()
                 .menu(&menu)
                 .tooltip("拾序 · 本地任务")
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show(app),
+                    "card" => {
+                        if let Some(card) = app.get_webview_window("card") {
+                            let _ = card.show();
+                            let _ = card.set_focus();
+                        }
+                    }
                     "new" => {
                         show(app);
                         let _ = app.emit("create_task", ());
@@ -120,6 +163,14 @@ pub fn run() {
             if std::env::args().any(|a| a == "--background") {
                 if let Some(window) = app.get_webview_window("main") {
                     window.hide()?;
+                }
+            }
+            if std::env::args().any(|a| a == "--card") {
+                if let Some(main) = app.get_webview_window("main") {
+                    main.hide()?;
+                }
+                if let Some(card) = app.get_webview_window("card") {
+                    card.show()?;
                 }
             }
             let handle = app.handle().clone();
@@ -182,7 +233,7 @@ pub fn run() {
             eprintln!("Unable to start LocalTodo: {error}");
             #[cfg(windows)]
             {
-                let _=std::process::Command::new("powershell.exe").args(["-NoProfile","-NonInteractive","-Command","Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show($env:LOCALTODO_STARTUP_ERROR, '拾序启动失败')"]).env("LOCALTODO_STARTUP_ERROR",format!("无法启动，请检查应用数据目录的权限或备份后恢复数据。\n{error}")).creation_flags_hidden().status();
+                let _=std::process::Command::new("powershell.exe").args(["-NoProfile","-NonInteractive","-Command","Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show($env:LOCALTODO_STARTUP_ERROR, '拾序启动失败')"]).env("LOCALTODO_STARTUP_ERROR",format!("无法启动，请检查程序旁 data 文件夹的写入权限或备份后恢复数据。\n{error}")).creation_flags_hidden().status();
             }
         }
     }

@@ -1,3 +1,5 @@
+> 此文为0.1.0历史安装版记录。当前交付已改为0.2.0便携版，见[portable-release.md](portable-release.md)。
+
 # 首版本地交付
 
 日期：2026-10-08；版本：0.1.0；平台：Windows x64；名称：拾序 · LocalTodo。

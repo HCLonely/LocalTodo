@@ -32,6 +32,69 @@ fn platform_error(message: impl ToString) -> CommandError {
         message: message.to_string(),
     }
 }
+#[tauri::command]
+pub fn open_card(app: tauri::AppHandle) -> Result<(), CommandError> {
+    let card = app
+        .get_webview_window("card")
+        .ok_or_else(|| platform_error("小卡片窗口不可用"))?;
+    card.show().map_err(platform_error)?;
+    card.unminimize().map_err(platform_error)?;
+    card.set_focus().map_err(platform_error)
+}
+#[tauri::command]
+pub fn hide_card(app: tauri::AppHandle) -> Result<(), CommandError> {
+    app.get_webview_window("card")
+        .ok_or_else(|| platform_error("小卡片窗口不可用"))?
+        .hide()
+        .map_err(platform_error)
+}
+#[tauri::command]
+pub fn open_main(app: tauri::AppHandle) {
+    crate::desktop::show(&app);
+}
+#[tauri::command]
+pub async fn edit_in_main(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    id: String,
+) -> Result<(), CommandError> {
+    use tauri::Emitter;
+    let task = with_store(state.inner().clone(), move |store| store.get_task(&id)).await?;
+    crate::desktop::show(&app);
+    app.emit_to("main", "edit_task", task)
+        .map_err(platform_error)
+}
+#[tauri::command]
+pub fn card_pin(state: State<'_, Arc<AppState>>) -> Result<bool, CommandError> {
+    Ok(*state
+        .card_pinned
+        .lock()
+        .map_err(|_| platform_error("小卡片状态不可用"))?)
+}
+#[tauri::command]
+pub fn set_card_pin(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    value: bool,
+) -> Result<bool, CommandError> {
+    use std::io::Write;
+    let mut previous = state
+        .card_pinned
+        .lock()
+        .map_err(|_| platform_error("小卡片状态不可用"))?;
+    let card = app
+        .get_webview_window("card")
+        .ok_or_else(|| platform_error("小卡片窗口不可用"))?;
+    card.set_always_on_top(value).map_err(platform_error)?;
+    if let Err(error) = atomic_write_with(&state.data_directory.join("card.json"), |file| {
+        file.write_all(if value { b"true" } else { b"false" })
+    }) {
+        let _ = card.set_always_on_top(*previous);
+        return Err(error.into());
+    }
+    *previous = value;
+    Ok(value)
+}
 async fn with_store<T: Send + 'static>(
     state: Arc<AppState>,
     action: impl FnOnce(&mut Store) -> AppResult<T> + Send + 'static,
@@ -196,7 +259,7 @@ pub async fn export_backup(
     let Some(file) = file else { return Ok(None) };
     let path = file.into_path().map_err(platform_error)?;
     let result = path.display().to_string();
-    let protected = app.path().app_data_dir().map_err(platform_error)?;
+    let protected = state.data_directory.clone();
     with_store(state.inner().clone(), move |store| {
         if path.starts_with(&protected) {
             return Err(invalid(

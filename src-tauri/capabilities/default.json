@@ -1,1 +1,15 @@
-{"identifier":"main","description":"Local desktop window permissions","windows":["main"],"permissions":["core:default","dialog:allow-open","dialog:allow-save","dialog:allow-message"]}
+{
+  "identifier": "main",
+  "description": "Local desktop window permissions",
+  "windows": [
+    "main",
+    "card"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "dialog:allow-message",
+    "core:window:allow-start-dragging"
+  ]
+}

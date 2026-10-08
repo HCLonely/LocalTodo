@@ -4,6 +4,8 @@ import type {Snapshot,View,TaskDraft,Settings,Task} from './types';
 export interface Query {view:View;selected_date:string|null;search:string;priority:number|null;offset:number;limit:number}
 async function call<T>(command:string,args?:Record<string,unknown>):Promise<T>{try{return await invoke<T>(command,args);}catch(e){throw new Error(typeof e==='object'&&e&&'message' in e?String(e.message):typeof e==='string'?e:'请通过桌面程序打开，浏览器预览不连接本地数据库。');}}
 export const api={
+ openCard:()=>call<void>('open_card'),hideCard:()=>call<void>('hide_card'),openMain:()=>call<void>('open_main'),
+ cardPin:()=>call<boolean>('card_pin'),setCardPin:(value:boolean)=>call<boolean>('set_card_pin',{value}),editInMain:(id:string)=>call<void>('edit_in_main',{id}),
  snapshot:(query:Query)=>call<Snapshot>('snapshot',{query}),
  save:(id:string|null,draft:TaskDraft,scope:'single'|'following')=>call<Task>('save_task',{id,draft,scope}),
  complete:(id:string,value:boolean)=>call<void>('set_completed',{id,value}),

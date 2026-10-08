@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-08T05:34:47.035Z",
+  "at": "2026-10-08T06:15:51.985Z",
   "results": [
     {
       "name": "native window loads SQLite-backed empty state",
@@ -35,6 +35,26 @@
     },
     {
       "name": "Windows notification API accepts a test notification",
+      "passed": true
+    },
+    {
+      "name": "desktop card creates tasks and synchronizes main window",
+      "passed": true
+    },
+    {
+      "name": "card always-on-top setting updates native window and persists",
+      "passed": true
+    },
+    {
+      "name": "card task title opens the same task editor in main window",
+      "passed": true
+    },
+    {
+      "name": "card completion synchronizes both views",
+      "passed": true
+    },
+    {
+      "name": "hidden card reopens from main entry",
       "passed": true
     }
   ],
