@@ -165,12 +165,21 @@ impl Task {
         })
     }
 }
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StartupView {
+    #[default]
+    Main,
+    Card,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub theme: String,
     pub timezone: String,
     pub default_reminder_time: NaiveTime,
     pub autostart: bool,
+    #[serde(default)]
+    pub startup_view: StartupView,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -182,6 +191,7 @@ impl Default for Settings {
                 .unwrap_or_else(|| "Asia/Shanghai".into()),
             default_reminder_time: NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
             autostart: false,
+            startup_view: StartupView::Main,
         }
     }
 }

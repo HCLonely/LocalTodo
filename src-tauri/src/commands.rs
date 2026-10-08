@@ -303,9 +303,14 @@ pub async fn restore_backup(
         // Restoring task data must not silently enable startup from an imported preference.
         let mut value: serde_json::Value = serde_json::from_str(&json)?;
         if let Some(settings) = value.get_mut("settings").and_then(|v| v.as_object_mut()) {
+            let current = store.settings()?;
             settings.insert(
                 "autostart".into(),
-                serde_json::Value::Bool(store.settings()?.autostart),
+                serde_json::Value::Bool(current.autostart),
+            );
+            settings.insert(
+                "startup_view".into(),
+                serde_json::to_value(current.startup_view)?,
             );
         }
         store.restore_json(&serde_json::to_string(&value)?, Utc::now())

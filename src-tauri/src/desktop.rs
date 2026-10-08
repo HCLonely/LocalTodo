@@ -7,7 +7,7 @@ use tauri::{
     Emitter, Manager,
 };
 use tauri_plugin_notification::NotificationExt;
-use todo_core::{invalid, AppResult, NotificationBatch, Store};
+use todo_core::{invalid, AppResult, NotificationBatch, StartupView, Store};
 
 pub struct AppState {
     pub store: Mutex<Store>,
@@ -63,7 +63,11 @@ pub fn run() {
     }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
-            if args.iter().any(|a| a == "--card") {
+            let login_card = args.iter().any(|a| a == "--background")
+                && app.state::<Arc<AppState>>().store.lock().ok()
+                    .and_then(|store| store.settings().ok())
+                    .is_some_and(|settings| settings.startup_view == StartupView::Card);
+            if args.iter().any(|a| a == "--card") || login_card {
                 if let Some(card) = app.get_webview_window("card") {
                     let _ = card.show();
                     let _ = card.set_focus();
@@ -108,10 +112,15 @@ pub fn run() {
                 wake: (Mutex::new(false), Condvar::new()),
                 scheduler_error: Mutex::new(None),
             });
+            let login_start = std::env::args().any(|arg| arg == "--background");
+            let start_card = std::env::args().any(|arg| arg == "--card")
+                || (login_start && state.store.lock().map_err(|_| "任务数据不可用")?.settings()?.startup_view == StartupView::Card);
             app.manage(state.clone());
             for config in &windows {
                 let mut builder = tauri::WebviewWindowBuilder::from_config(app, config)?
                     .data_directory(directory.join("webview"));
+                if config.label == "main" { builder = builder.visible(!start_card); }
+                if config.label == "card" { builder = builder.visible(start_card); }
                 if config.label == "card" { builder = builder.always_on_top(pinned); }
                 #[cfg(debug_assertions)]
                 if std::env::var_os("LOCALTODO_TEST_DATA_DIR").is_some() {
@@ -160,19 +169,6 @@ pub fn run() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
-            if std::env::args().any(|a| a == "--background") {
-                if let Some(window) = app.get_webview_window("main") {
-                    window.hide()?;
-                }
-            }
-            if std::env::args().any(|a| a == "--card") {
-                if let Some(main) = app.get_webview_window("main") {
-                    main.hide()?;
-                }
-                if let Some(card) = app.get_webview_window("card") {
-                    card.show()?;
-                }
-            }
             let handle = app.handle().clone();
             std::thread::Builder::new()
                 .name("todo-reminders".into())
