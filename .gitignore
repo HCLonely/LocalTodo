@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+src-tauri/target/
+.tools/
+.superpowers/
+test-results/
+playwright-report/
+*.db
+*.db-shm
+*.db-wal
+
