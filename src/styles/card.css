@@ -14,3 +14,7 @@ body:has(.desktop-card){margin:0;min-width:0;overflow:hidden;background:var(--su
 .card-context-menu button:hover,.card-context-menu button:focus-visible{background:var(--accent-soft);outline:none}
 .card-context-menu button.danger{color:var(--danger)}
 .card-context-menu button:disabled{opacity:.45;cursor:default;background:transparent}
+
+.card-task.is-overdue{background:var(--danger-soft);box-shadow:inset 3px 0 var(--danger)}
+.card-task.is-overdue .card-task-title{color:var(--danger)}
+.card-task.is-completed .card-task-title{text-decoration:line-through;color:var(--muted)}

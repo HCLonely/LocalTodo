@@ -54,15 +54,23 @@ pub fn matches_view(
     if view == "completed" {
         return Ok(task.completed);
     }
+    let today = ctx.now.with_timezone(&ctx.zone).date_naive();
+    let due = task.draft.due_date;
+    if view == "today" {
+        return Ok(due == Some(today)
+            || task.draft.planned_date == Some(today)
+            || is_overdue(task, ctx)?
+            || (task.completed
+                && task
+                    .completed_at
+                    .is_some_and(|at| at.with_timezone(&ctx.zone).date_naive() == today)));
+    }
     if task.completed {
         return Ok(false);
     }
-    let today = ctx.now.with_timezone(&ctx.zone).date_naive();
-    let due = task.draft.due_date;
     Ok(match view {
         "all" => true,
         "inbox" => due.is_none() && task.draft.planned_date.is_none(),
-        "today" => due == Some(today) || task.draft.planned_date == Some(today),
         "date" => due == selected && selected.is_some(),
         "overdue" => is_overdue(task, ctx)?,
         "week" => {

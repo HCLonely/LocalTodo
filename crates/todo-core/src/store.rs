@@ -481,7 +481,8 @@ impl Store {
         let search = query.search.trim().to_lowercase();
         for t in tasks {
             for v in views {
-                if matches_view(&t, v, query.selected_date, &ctx)? {
+                if matches_view(&t, v, query.selected_date, &ctx)? && (v != "today" || !t.completed)
+                {
                     *counts.get_mut(v).unwrap() += 1;
                 }
             }

@@ -20,6 +20,41 @@ fn draft() -> TaskDraft {
 }
 
 #[test]
+fn today_snapshot_retains_completed_overdue_task_but_counts_only_pending() {
+    let mut store = Store::memory().unwrap();
+    let task = store
+        .save_task(
+            None,
+            TaskDraft {
+                title: "昨天的任务".into(),
+                due_date: Some(d("2026-10-07")),
+                ..Default::default()
+            },
+            "single",
+            now(),
+        )
+        .unwrap();
+    let query = Query {
+        view: "today".into(),
+        selected_date: None,
+        search: String::new(),
+        priority: None,
+        offset: 0,
+        limit: 100,
+    };
+    let snapshot = store.snapshot(&query, now()).unwrap();
+    assert_eq!(snapshot.total, 1);
+    assert_eq!(snapshot.counts["today"], 1);
+    assert_eq!(snapshot.overdue_ids, vec![task.id.clone()]);
+    store.set_completed(&task.id, true, now()).unwrap();
+    let snapshot = store.snapshot(&query, now()).unwrap();
+    assert_eq!(snapshot.total, 1);
+    assert!(snapshot.tasks[0].completed);
+    assert_eq!(snapshot.counts["today"], 0);
+    assert!(snapshot.overdue_ids.is_empty());
+}
+
+#[test]
 fn tasks_survive_reopen_and_delete_restore_preserves_content() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test.db");

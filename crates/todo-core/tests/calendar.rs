@@ -13,6 +13,33 @@ fn ctx() -> CalendarContext {
 }
 
 #[test]
+fn today_keeps_overdue_tasks_after_completion_and_excludes_deleted_tasks() {
+    let mut task = Task::new(
+        TaskDraft {
+            title: "逾期报告".into(),
+            due_date: Some(date("2026-10-07")),
+            ..Default::default()
+        },
+        ctx().now,
+    )
+    .unwrap();
+    assert!(matches_view(&task, "today", None, &ctx()).unwrap());
+    assert!(is_overdue(&task, &ctx()).unwrap());
+    task.completed = true;
+    // Shanghai's October 8 starts on October 7 in UTC.
+    task.completed_at = Some(Utc.with_ymd_and_hms(2026, 10, 7, 17, 0, 0).unwrap());
+    assert!(matches_view(&task, "today", None, &ctx()).unwrap());
+    assert!(!is_overdue(&task, &ctx()).unwrap());
+    assert!(!matches_view(&task, "all", None, &ctx()).unwrap());
+    task.completed_at = Some(Utc.with_ymd_and_hms(2026, 10, 7, 15, 0, 0).unwrap());
+    assert!(!matches_view(&task, "today", None, &ctx()).unwrap());
+    task.draft.planned_date = Some(date("2026-10-08"));
+    assert!(matches_view(&task, "today", None, &ctx()).unwrap());
+    task.deleted = true;
+    assert!(!matches_view(&task, "today", None, &ctx()).unwrap());
+}
+
+#[test]
 fn date_views_share_a_task_without_changing_its_deadline() {
     let mut task = Task::new(
         TaskDraft {

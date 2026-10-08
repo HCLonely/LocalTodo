@@ -8,7 +8,7 @@ export default function TaskList(props:TaskListProps){
  async function run(task:Task,action:(t:Task)=>Promise<void>){setError('');setPending(p=>[...p,task.id]);try{await action(task);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setPending(p=>p.filter(id=>id!==task.id));}}
  return <div className="task-list">{error&&<p role="alert" className="error">{error}</p>}{props.tasks.map(task=>{
  const overdue=props.overdueIds.includes(task.id);const children=task.draft.subtasks;const disabled=pending.includes(task.id);
- return <article className={`task-row ${task.completed?'is-completed':''}`} key={task.id}>
+ return <article className={`task-row ${task.completed?'is-completed':''} ${overdue?'is-overdue':''}`} key={task.id}>
    <span className={`priority-line priority-${task.draft.priority}`}/>
    <input type="checkbox" className="task-check" aria-label={`${task.completed?'恢复':'完成'} ${task.draft.title}`} checked={task.completed} disabled={disabled||task.deleted} onChange={async()=>{if(!task.completed&&children.some(s=>!s.completed)&&!await confirmAction('完成父任务将同时完成所有未完成子任务，是否继续？'))return;void run(task,props.onToggle);}}/>
    <div className="task-content"><button className="task-title" onClick={()=>props.onEdit(task)} disabled={disabled}>{task.draft.title}</button>{task.draft.note&&<p className="task-note">{task.draft.note}</p>}

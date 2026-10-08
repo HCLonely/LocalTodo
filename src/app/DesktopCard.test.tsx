@@ -6,6 +6,18 @@ import {emptyDraft} from '../features/tasks/types';
 const mock=vi.hoisted(()=>({snapshot:vi.fn(),save:vi.fn(),complete:vi.fn(),remove:vi.fn(),cardPin:vi.fn().mockResolvedValue(true),setCardPin:vi.fn(),hideCard:vi.fn(),openMain:vi.fn(),editInMain:vi.fn(),subscribe:vi.fn().mockResolvedValue(()=>{})}));
 vi.mock('../features/tasks/api',()=>({api:mock}));
 const snapshot={tasks:[],total:0,today:'2026-10-08',overdue_ids:[],counts:{today:0,overdue:0},settings:{theme:'light'},generation_pending:false};
+it('本日卡片高亮逾期任务，完成后保留勾选和删除线样式并可恢复',async()=>{
+ const task={id:'overdue-task',draft:{...emptyDraft('2026-10-08'),title:'逾期任务',due_date:'2026-10-07'},completed:false,deleted:false,series_id:null,occurrence_date:null,revision:1,created_at:'',updated_at:'',completed_at:null};
+ mock.snapshot.mockResolvedValue({...snapshot,tasks:[task],total:1,overdue_ids:[task.id]});
+ mock.complete.mockImplementation(async(_id:string,value:boolean)=>{mock.snapshot.mockResolvedValue({...snapshot,tasks:[{...task,completed:value}],total:1,overdue_ids:value?[]:[task.id]});});
+ const user=userEvent.setup();render(<DesktopCard/>);
+ const checkbox=await screen.findByRole('checkbox',{name:'完成 逾期任务'});
+ expect(screen.getByRole('article')).toHaveClass('is-overdue');
+ await user.click(checkbox);
+ const checked=await screen.findByRole('checkbox',{name:'恢复 逾期任务'});
+ expect(checked).toBeChecked();expect(screen.getByRole('article')).toHaveClass('is-completed');expect(screen.getByRole('article')).not.toHaveClass('is-overdue');
+ await user.click(checked);await waitFor(()=>expect(mock.complete).toHaveBeenLastCalledWith(task.id,false));
+});
 it('任务右键只显示管理菜单，编辑和删除使用正确任务，Esc可关闭',async()=>{
  const task={id:'context-task',draft:{...emptyDraft('2026-10-08'),title:'右键任务'},completed:false,deleted:false,series_id:null,occurrence_date:null,revision:1,created_at:'',updated_at:'',completed_at:null};
  mock.snapshot.mockResolvedValue({...snapshot,tasks:[task],total:1});mock.editInMain.mockResolvedValue(undefined);mock.remove.mockRejectedValue(new Error('删除失败'));

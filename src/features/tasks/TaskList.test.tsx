@@ -12,4 +12,12 @@ it('完成写入失败时保留未完成状态并展示错误',async()=>{
 it('逾期使用文字标识且点击标题打开同一任务',async()=>{
  const edit=vi.fn();render(<TaskList tasks={[task]} overdueIds={['id1']} view="overdue" onEdit={edit} onToggle={async()=>{}} onToday={async()=>{}} onDelete={async()=>{}}/>);
  expect(screen.getByText('已逾期')).toBeVisible();await userEvent.click(screen.getByRole('button',{name:'写报告'}));expect(edit).toHaveBeenCalledWith(task);
+ expect(screen.getByRole('article')).toHaveClass('is-overdue');
+});
+it('本日任务中的已完成任务保持勾选和完成样式并支持恢复',async()=>{
+ const completed={...task,completed:true};const toggle=vi.fn().mockResolvedValue(undefined);
+ render(<TaskList tasks={[completed]} overdueIds={[]} view="today" onEdit={()=>{}} onToggle={toggle} onToday={async()=>{}} onDelete={async()=>{}}/>);
+ const checkbox=screen.getByRole('checkbox',{name:'恢复 写报告'});
+ expect(checkbox).toBeChecked();expect(screen.getByRole('article')).toHaveClass('is-completed');
+ await userEvent.click(checkbox);expect(toggle).toHaveBeenCalledWith(completed);
 });
