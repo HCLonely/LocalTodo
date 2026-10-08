@@ -1,10 +1,12 @@
-# 拾序 · LocalTodo
+# 拾序 · LocalTodo 便携版
 
 使用 Tauri 2、Rust、React/TypeScript 和 SQLite 的 Windows 本地任务程序。支持本日、本周、本月、指定日期任务、重复任务、截止提醒、子任务和备份恢复。
 
 ## 使用
 
-首版安装包：[`LocalTodo_0.1.0_x64-setup.exe`](target/release/bundle/nsis/LocalTodo_0.1.0_x64-setup.exe)。本机已安装，可从开始菜单启动 LocalTodo。发布与校验说明见[release.md](docs/release.md)。
+当前交付为 **0.2.0 便携版**，无需安装。先解压[便携ZIP](portable/LocalTodo-0.2.0-windows-x64.zip)，然后双击`LocalTodo/local-todo.exe`。本工程可直接启动[便携程序](portable/LocalTodo/local-todo.exe)。发布说明见[portable-release.md](docs/portable-release.md)。
+
+主界面右上角“小卡片”或托盘右键“桌面小卡片”打开常驻小卡片；也可运行`Open-Desktop-Card.cmd`直接启动卡片。顶部拖动区域可移动，边缘可调整大小，图钉按钮切换置顶并保存偏好。卡片支持切换今日/本周/逾期/全部，快速添加今日待办、勾选完成、点击任务打开主界面详情。两窗口实时同步。
 
 - 新建任务：点击“新建任务”，或按 `Ctrl+N`。
 - 安排到今天：只改变计划日期，不改变截止日期。
@@ -17,7 +19,9 @@
 - 编辑重复任务时，可选择仅本次或本次及以后；修改重复规则需要选择后者。
 - 在设置中切换主题、设置时区和登录启动、测试通知、导出JSON或SQLite快照。
 
-数据库由Tauri应用数据目录解析，Windows通常位于 `%APPDATA%\com.localtodo.desktop\todo.db`。实际目录以运行环境为准；无需账号，运行时无需网络。WebView2缺失时安装程序会下载运行时，建议在有WebView2的机器上测试离线使用。
+数据库、设置、卡片偏好和WebView2缓存均位于**exe所在目录的`data`文件夹**：`data/todo.db`、`data/card.json`、`data/webview/`。路径与启动工作目录无关；移动时一起移动整个LocalTodo文件夹，先从托盘退出再复制。程序目录必须可写，不会回退到AppData。
+
+便携版要求机器已有Microsoft Edge WebView2 Runtime；运行时无需网络。旧安装版及其AppData数据不会自动迁移或删除；已有任务可通过旧JSON备份在便携版设置中恢复。登录启动可选，移动文件夹后应在设置中重新关闭/开启登录启动，以更新Windows启动路径。
 
 JSON恢复会替换当前任务和设置，恢复前会在数据库目录保存 `todo.before-restore-时间.db`。登录启动偏好保持当前状态；历史提醒不会在恢复时重新发送。SQLite快照用于人工灾难恢复，应用内恢复入口接受JSON。
 
@@ -32,7 +36,7 @@ npm ci
 ./scripts/build.ps1
 ```
 
-`scripts/build.ps1`把打包临时目录放到项目所在盘，构建工具缓存在`target/.tauri/`，避免跨盘和加密目录的移动问题。
+`scripts/build.ps1`仅构建便携EXE和ZIP，不运行安装器。ZIP从独立空白目录打包，不包含工作目录里的用户数据。
 
 独立核心测试和性能测量：
 
@@ -58,10 +62,12 @@ npm run tauri build -- --debug --no-bundle
 - `src`：中文界面、任务详情、设置、提醒中心与交互测试。
 - `docs`：已确认方案、开发记录、验收结果与界面截图。
 
-首版不包含云同步、独立Windows服务或通知点击跳转；关机/主动退出时不发送提醒。已通过20项Rust测试、11项前端测试和9项真实桌面检查；本机安装、关闭驻留、单实例及通知提交通过。公开分发前仍需完成干净Windows 10/11机器、真实睡眠恢复、通知关闭/勿扰、登录启动及含大量数据的跨版本升级验收，详见[acceptance.md](docs/acceptance.md)。
+首版不包含云同步、独立Windows服务或通知点击跳转；关机/主动退出时不发送提醒。已通过21项Rust测试、14项前端测试和14项真实桌面检查；本机安装、关闭驻留、单实例及通知提交通过。公开分发前仍需完成干净Windows 10/11机器、真实睡眠恢复、通知关闭/勿扰、登录启动及含大量数据的跨版本升级验收，详见[acceptance.md](docs/acceptance.md)。
 
 界面截图：
 
 ![浅色界面](docs/screenshots/desktop-light.png)
 
-安装版检查（先退出当前实例再执行）：`./scripts/installed-smoke.ps1`。该脚本在检查完成后保留程序运行；原生确认测试通过Windows UI Automation按按钮。数据库指纹辅助脚本需要可用的Python3与sqlite3，日常开发和构建无需Python。
+便携发布版检查（先从托盘退出当前实例再执行）：`./scripts/portable-smoke.ps1`。该脚本在检查完成后保留程序运行；原生确认测试通过Windows UI Automation按按钮。数据库指纹辅助脚本需要可用的Python3与sqlite3，日常开发和构建无需Python。
+
+![桌面小卡片](docs/screenshots/desktop-card.png)
