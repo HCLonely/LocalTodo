@@ -7,3 +7,5 @@ body:has(.desktop-card){margin:0;min-width:0;overflow:hidden;background:var(--su
 .card-error{padding:8px 12px;margin:0 12px 8px;background:#fff0ef;color:#ae3936;border-radius:6px;font-size:11px;overflow-wrap:anywhere}.card-error button{border:0;background:none;color:inherit;text-decoration:underline;cursor:pointer;margin-left:8px}.card-quick-add{display:flex;gap:7px;padding:12px 12px 8px;flex-shrink:0}.card-quick-add input{flex:1;min-width:0;padding:10px 11px;background:var(--bg,#f7f8fc);color:inherit;border:1px solid var(--border,#e5e9f2);border-radius:8px;font:inherit}.card-quick-add button{display:flex;align-items:center;justify-content:center;background:#4e6be2;color:white;border:0;border-radius:8px;width:36px;cursor:pointer}.card-quick-add button:disabled{opacity:.5;cursor:default}.card-footer{padding:2px 16px 10px;display:flex;gap:6px;align-items:center;color:var(--muted,#788397);font-size:9px;flex-shrink:0}
 
 .card-filter select{min-height:24px}.card-quick-add button{background:var(--accent);color:var(--on-accent)}
+.card-task{border-radius:6px;transition:background-color .15s ease}
+.card-task:hover,.card-task:focus-within{background:var(--accent-soft)}

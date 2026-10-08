@@ -29,16 +29,18 @@ exe旁的`data/todo.db`保存任务与设置，`data/card.json`保存置顶偏�
 
 证据：desktop-smoke-results.json、portable-smoke-results.json、portable-release-verification.json。干净Windows10/11、真实睡眠恢复/勿扰与注销后登录启动仍待独立系统验收。
 
-ZIP大小：4,682,660字节；SHA-256：
+ZIP大小：4,682,367字节；SHA-256：
 
 ```
-ffa74104c5df1d94d5d58b6a78efb014d5787df8b92dc8e0ca70e507eb6df4f4
+87fd785bd67a99d2e78a083dc6244934a00cea949742beb1358158ecabce2782
 ```
 
 EXE大小：14,438,912字节；SHA-256：
 
 ```
-87f4b9eed806a6dce5101b31e7384701e32ba916f647a7831cfb6fcbd4f60a4d
+f2858e33be55d4748bcbb999778d608330a62c94931e33be16df72c8be3addf4
 ```
 
 ![卡片界面](screenshots/desktop-card.png)
+
+小卡片任务整行悬浮高亮已加入；浅色与深色主题均验证，包含复选框、标题、信息及行尾空白区域。便携EXE和ZIP同步更新。
