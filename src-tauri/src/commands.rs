@@ -34,12 +34,7 @@ fn platform_error(message: impl ToString) -> CommandError {
 }
 #[tauri::command]
 pub fn open_card(app: tauri::AppHandle) -> Result<(), CommandError> {
-    let card = app
-        .get_webview_window("card")
-        .ok_or_else(|| platform_error("小卡片窗口不可用"))?;
-    card.show().map_err(platform_error)?;
-    card.unminimize().map_err(platform_error)?;
-    card.set_focus().map_err(platform_error)
+    crate::card_window::show(&app).map_err(platform_error)
 }
 #[tauri::command]
 pub fn hide_card(app: tauri::AppHandle) -> Result<(), CommandError> {
@@ -85,11 +80,14 @@ pub fn set_card_pin(
     let card = app
         .get_webview_window("card")
         .ok_or_else(|| platform_error("小卡片窗口不可用"))?;
-    card.set_always_on_top(value).map_err(platform_error)?;
+    if let Err(error) = crate::card_window::apply_pin(&card, value) {
+        let _ = crate::card_window::apply_pin(&card, *previous);
+        return Err(platform_error(error));
+    }
     if let Err(error) = atomic_write_with(&state.data_directory.join("card.json"), |file| {
         file.write_all(if value { b"true" } else { b"false" })
     }) {
-        let _ = card.set_always_on_top(*previous);
+        let _ = crate::card_window::apply_pin(&card, *previous);
         return Err(error.into());
     }
     *previous = value;

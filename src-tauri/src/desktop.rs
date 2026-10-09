@@ -68,10 +68,7 @@ pub fn run() {
                     .and_then(|store| store.settings().ok())
                     .is_some_and(|settings| settings.startup_view == StartupView::Card);
             if args.iter().any(|a| a == "--card") || login_card {
-                if let Some(card) = app.get_webview_window("card") {
-                    let _ = card.show();
-                    let _ = card.set_focus();
-                }
+                let _ = crate::card_window::show(app);
             } else {
                 show(app);
             }
@@ -141,10 +138,7 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show(app),
                     "card" => {
-                        if let Some(card) = app.get_webview_window("card") {
-                            let _ = card.show();
-                            let _ = card.set_focus();
-                        }
+                        let _ = crate::card_window::show(app);
                     }
                     "new" => {
                         show(app);
@@ -169,6 +163,21 @@ pub fn run() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
+            #[cfg(windows)]
+            {
+                let pin_handle = app.handle().clone();
+                std::thread::Builder::new()
+                    .name("card-pin-recovery".into())
+                    .spawn(move || loop {
+                        std::thread::sleep(Duration::from_secs(2));
+                        let app = pin_handle.clone();
+                        if pin_handle.run_on_main_thread(move || {
+                            if let Err(error) = crate::card_window::repair_pin(&app) {
+                                eprintln!("Unable to restore card pin: {error}");
+                            }
+                        }).is_err() { break; }
+                    })?;
+            }
             let handle = app.handle().clone();
             std::thread::Builder::new()
                 .name("todo-reminders".into())
