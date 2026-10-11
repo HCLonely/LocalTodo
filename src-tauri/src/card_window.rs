@@ -17,8 +17,20 @@ pub fn show(app: &tauri::AppHandle) -> Result<(), String> {
     let card = app.get_webview_window("card").ok_or("小卡片窗口不可用")?;
     card.show().map_err(|e| e.to_string())?;
     card.unminimize().map_err(|e| e.to_string())?;
+    card.set_skip_taskbar(true).map_err(|e| e.to_string())?;
     card.set_focus().map_err(|e| e.to_string())?;
     apply_pin(&card, *pinned)
+}
+
+pub fn minimize(app: &tauri::AppHandle) -> Result<(), String> {
+    let card = app.get_webview_window("card").ok_or("小卡片窗口不可用")?;
+    // Add the taskbar entry before minimizing so the card can be restored there.
+    card.set_skip_taskbar(false).map_err(|e| e.to_string())?;
+    if let Err(error) = card.minimize() {
+        let _ = card.set_skip_taskbar(true);
+        return Err(error.to_string());
+    }
+    Ok(())
 }
 
 #[cfg(windows)]

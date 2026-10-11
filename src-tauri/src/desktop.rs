@@ -226,6 +226,14 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // Windows emits Resized for minimize/restore, including taskbar restores.
+            if window.label() == "card" && matches!(event, tauri::WindowEvent::Resized(_)) {
+                if let Ok(minimized) = window.is_minimized() {
+                    if let Err(error) = window.set_skip_taskbar(!minimized) {
+                        eprintln!("Unable to update card taskbar visibility: {error}");
+                    }
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
