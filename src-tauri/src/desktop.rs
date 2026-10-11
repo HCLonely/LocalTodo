@@ -91,6 +91,7 @@ pub fn run() {
             crate::commands::restore_backup,
             crate::commands::open_card,
             crate::commands::hide_card,
+            crate::commands::minimize_card,
             crate::commands::card_pin,
             crate::commands::set_card_pin,
             crate::commands::open_main,

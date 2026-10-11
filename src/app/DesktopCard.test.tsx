@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import {it,expect,vi} from 'vitest';
 import DesktopCard from './DesktopCard';
 import {emptyDraft} from '../features/tasks/types';
-const mock=vi.hoisted(()=>({snapshot:vi.fn(),save:vi.fn(),complete:vi.fn(),remove:vi.fn(),cardPin:vi.fn().mockResolvedValue(true),setCardPin:vi.fn(),hideCard:vi.fn(),openMain:vi.fn(),editInMain:vi.fn(),subscribe:vi.fn().mockResolvedValue(()=>{})}));
+const mock=vi.hoisted(()=>({snapshot:vi.fn(),save:vi.fn(),complete:vi.fn(),remove:vi.fn(),cardPin:vi.fn().mockResolvedValue(true),setCardPin:vi.fn(),hideCard:vi.fn(),minimizeCard:vi.fn(),openMain:vi.fn(),editInMain:vi.fn(),subscribe:vi.fn().mockResolvedValue(()=>{})}));
 vi.mock('../features/tasks/api',()=>({api:mock}));
 const snapshot={tasks:[],total:0,today:'2026-10-08',overdue_ids:[],counts:{today:0,overdue:0},settings:{theme:'light'},generation_pending:false};
 it('本日卡片高亮逾期任务，完成后保留勾选和删除线样式并可恢复',async()=>{
@@ -52,4 +52,18 @@ it('完成写入失败时卡片保留未完成状态',async()=>{
  mock.complete.mockRejectedValue(new Error('保存失败'));const user=userEvent.setup();render(<DesktopCard/>);
  const checkbox=await screen.findByRole('checkbox',{name:'完成 还没完成'});await user.click(checkbox);
  expect(await screen.findByRole('alert')).toHaveTextContent('保存失败');expect(checkbox).not.toBeChecked();
+});
+
+it('顶部按钮和右键菜单可最小化到任务栏',async()=>{
+ mock.snapshot.mockResolvedValue(snapshot);mock.minimizeCard.mockResolvedValue(undefined);mock.minimizeCard.mockClear();mock.hideCard.mockClear();
+ const user=userEvent.setup();render(<DesktopCard/>);await screen.findByText('今天清清爽爽');
+ await user.click(screen.getByRole('button',{name:'最小化到任务栏'}));expect(mock.minimizeCard).toHaveBeenCalledTimes(1);
+ fireEvent.contextMenu(screen.getByRole('heading'));await user.click(screen.getByRole('menuitem',{name:'最小化到任务栏'}));expect(mock.minimizeCard).toHaveBeenCalledTimes(2);
+ expect(mock.hideCard).not.toHaveBeenCalled();expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+});
+it('最小化失败显示错误并允许重试',async()=>{
+ mock.snapshot.mockResolvedValue(snapshot);mock.minimizeCard.mockRejectedValueOnce(new Error('最小化失败')).mockResolvedValue(undefined);
+ const user=userEvent.setup();render(<DesktopCard/>);await screen.findByText('今天清清爽爽');const button=screen.getByRole('button',{name:'最小化到任务栏'});
+ await user.click(button);expect(await screen.findByRole('alert')).toHaveTextContent('最小化失败');
+ await user.click(button);await waitFor(()=>expect(screen.queryByRole('alert')).not.toBeInTheDocument());
 });

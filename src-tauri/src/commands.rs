@@ -44,6 +44,13 @@ pub fn hide_card(app: tauri::AppHandle) -> Result<(), CommandError> {
         .map_err(platform_error)
 }
 #[tauri::command]
+pub fn minimize_card(app: tauri::AppHandle) -> Result<(), CommandError> {
+    app.get_webview_window("card")
+        .ok_or_else(|| platform_error("小卡片窗口不可用"))?
+        .minimize()
+        .map_err(platform_error)
+}
+#[tauri::command]
 pub fn open_main(app: tauri::AppHandle) {
     crate::desktop::show(&app);
 }
